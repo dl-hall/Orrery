@@ -1,0 +1,2451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orrery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script>
+  // Apply the saved theme before first paint.
+  try { const t = localStorage.getItem('orrery.theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+<style>
+/* ───────────────────────── Tokens ───────────────────────── */
+:root {
+  --bg: #EDF0F3;
+  --surface: #F8F9FB;
+  --surface-2: #E4E8ED;
+  --ink: #1B2430;
+  --muted: #5A6573;
+  --rule: #C9D0D8;
+  --rule-strong: #9AA5B2;
+  --brass: #B08A3E;        /* rings, marks */
+  --brass-text: #86651F;   /* brass used as text on light surfaces */
+  --brass-wash: rgba(176, 138, 62, .14);
+  --hover: rgba(27, 36, 48, .06);
+  --danger: #A33A2E;
+  --unassigned: #6B7480;
+  --orbit: rgba(27, 36, 48, .07);
+  --edge: #7F8B99;
+  --shadow: 0 1px 2px rgba(27,36,48,.06), 0 8px 24px rgba(27,36,48,.08);
+  --on-tile: #FFFFFF;
+  --tile-stroke: rgba(0,0,0,.18);
+
+  --font-ui: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-eyebrow: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --radius: 12px;
+  --fast: 150ms;
+  --panel-t: 200ms;
+  --ease-out: cubic-bezier(.23, 1, .32, 1);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161C; --surface: #1A2029; --surface-2: #232B36; --ink: #E6E9EE; --muted: #9AA4B1;
+    --rule: #2E3744; --rule-strong: #4A5566; --brass: #D4AE62; --brass-text: #D4AE62;
+    --brass-wash: rgba(212, 174, 98, .14); --hover: rgba(230, 233, 238, .07); --danger: #E0796B;
+    --unassigned: #5D6673; --orbit: rgba(230, 233, 238, .06); --edge: #6C7888;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.35); --tile-stroke: rgba(255,255,255,.14);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161C; --surface: #1A2029; --surface-2: #232B36; --ink: #E6E9EE; --muted: #9AA4B1;
+  --rule: #2E3744; --rule-strong: #4A5566; --brass: #D4AE62; --brass-text: #D4AE62;
+  --brass-wash: rgba(212, 174, 98, .14); --hover: rgba(230, 233, 238, .07); --danger: #E0796B;
+  --unassigned: #5D6673; --orbit: rgba(230, 233, 238, .06); --edge: #6C7888;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.35); --tile-stroke: rgba(255,255,255,.14);
+  color-scheme: dark;
+}
+
+/* ───────────────────────── Base ───────────────────────── */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 14px/1.45 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+input, textarea, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+.ic { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.ic.sm { width: 16px; height: 16px; }
+.eyebrow { font: italic 400 17px/1.2 var(--font-eyebrow); color: var(--muted); letter-spacing: .01em; }
+.mono { font-family: var(--font-mono); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ───────────────────────── Stage ───────────────────────── */
+#stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: default; touch-action: none; user-select: none; }
+#stage.panning { cursor: grabbing; }
+.orbits circle { fill: none; stroke: var(--orbit); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.orbits { transition: opacity 300ms ease; }
+.orbits.off { opacity: 0; }
+
+.edges line { stroke: var(--edge); stroke-width: 1.4; transition: opacity var(--fast) ease, stroke var(--fast) ease; }
+.edges line.lit { stroke: var(--ink); stroke-width: 1.8; }
+.edges line.dim { opacity: .12; }
+
+.card { cursor: pointer; }
+.card .body { transition: opacity var(--fast) ease; }
+.card .body.dim { opacity: .18; }
+.card .shape { stroke-width: 1.5; }
+.card.t-role .shape { stroke: var(--tile-stroke); stroke-width: 1; }
+.card .kicon { stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.headers text.note { fill: var(--muted); font: italic 400 24px var(--font-eyebrow); letter-spacing: 0; }
+.card.t-role text { fill: var(--on-tile); font: 600 13px var(--font-ui); }
+.card.t-process .shape { fill: var(--surface); stroke: var(--ink); }
+.card.t-process text { fill: var(--ink); font: 500 14px var(--font-ui); }
+.card.t-process.k-header text { font-size: 15px; font-weight: 600; }
+.card.t-meeting .shape, .card.t-document .shape { fill: var(--surface); stroke: var(--rule-strong); stroke-width: 1; }
+.card.t-meeting text, .card.t-document text { fill: var(--ink); font: 500 12.5px var(--font-ui); }
+.card.t-meeting.k-header text { font-size: 14px; font-weight: 600; }
+.card.t-meeting.k-header .shape { stroke: var(--ink); stroke-width: 1.5; }
+.card .kicon { color: var(--muted); }
+.card.t-role .kicon { color: var(--on-tile); opacity: .85; }
+.card .sub { fill: var(--muted) !important; font: 500 11px var(--font-mono) !important; letter-spacing: .02em; }
+.card .chip rect { fill: var(--ink); }
+.card .chip text { fill: var(--surface) !important; font: 500 9.5px var(--font-mono) !important; letter-spacing: .04em; }
+.card .chip.outline rect { fill: none; stroke: currentColor; }
+.card.t-role .chip rect { fill: rgba(255,255,255,.92); }
+.card.t-role .chip text { fill: #1B2430 !important; }
+.card.t-role .chip.outline rect { fill: none; stroke: rgba(255,255,255,.8); }
+.card.t-role .chip.outline text { fill: #FFFFFF !important; }
+.card:not(.t-role) .chip.outline { color: var(--ink); }
+.card:not(.t-role) .chip.outline text { fill: var(--ink) !important; }
+.card .badge circle { fill: var(--ink); stroke: var(--bg); stroke-width: 2; }
+.card .badge use { color: var(--surface); }
+.card .pin { fill: var(--brass); }
+.card .ring { fill: none; stroke: var(--brass); stroke-width: 2.5; opacity: 0; transition: opacity var(--fast) ease; pointer-events: none; }
+.card.selected .ring { opacity: 1; }
+.card.link-target .ring { opacity: 1; stroke-dasharray: 4 3; }
+.card.link-invalid { cursor: not-allowed; }
+.headers rect { rx: 8px; }
+.headers text { fill: #FFFFFF; font: 600 13px var(--font-ui); letter-spacing: .02em; }
+.headers .unassigned { fill: var(--unassigned); }
+.rubber { stroke: var(--brass); stroke-width: 2; stroke-dasharray: 6 5; fill: none; pointer-events: none; vector-effect: non-scaling-stroke; }
+.rubber.invalid { stroke: var(--danger); }
+
+/* ───────────────────────── Panels ───────────────────────── */
+.panel {
+  position: fixed; z-index: 10;
+  background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  transition: transform var(--panel-t) var(--ease-out), opacity var(--panel-t) var(--ease-out), visibility 0s linear 0s;
+}
+.panel.collapsed { opacity: 0; pointer-events: none; visibility: hidden; transition: transform var(--panel-t) var(--ease-out), opacity var(--panel-t) var(--ease-out), visibility 0s linear var(--panel-t); }
+.orb {
+  position: absolute; z-index: 11; width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--ink); color: var(--bg); box-shadow: var(--shadow);
+  transition: transform var(--fast) var(--ease-out), opacity var(--panel-t) ease, background var(--fast) ease;
+}
+.orb:hover { background: var(--brass-text); }
+.orb:active { transform: scale(.94); }
+.orb .ic { width: 18px; height: 18px; stroke-width: 2.25; }
+.orb.small { width: 28px; height: 28px; }
+.orb.small .ic { width: 16px; height: 16px; }
+.orb[hidden] { display: none; }
+
+.iconbtn {
+  width: 38px; height: 38px; border-radius: 9px; display: grid; place-items: center; position: relative;
+  color: var(--ink); transition: background var(--fast) ease, color var(--fast) ease, transform var(--fast) var(--ease-out);
+}
+.iconbtn:hover { background: var(--hover); }
+.iconbtn:active { transform: scale(.94); }
+.iconbtn:disabled { color: var(--rule-strong); cursor: default; background: none; transform: none; }
+.iconbtn[aria-pressed="true"] { background: var(--brass-wash); color: var(--brass-text); }
+.iconbtn .dot { position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--brass); box-shadow: 0 0 0 2px var(--surface); }
+
+/* Toolbar (top left) */
+#toolbar { top: 16px; left: 16px; padding: 6px; display: flex; align-items: center; gap: 2px; }
+#toolbar.collapsed { transform: translateX(-12px); }
+#toolbar .sep { width: 1px; height: 22px; background: var(--rule); margin: 0 5px; }
+#toolbar-collapse { position: static; margin-left: 6px; }
+#toolbar-open, #legend-open, #detail-open { position: fixed; }
+#toolbar-open { top: 16px; left: 16px; }
+#sub-toggle { position: absolute; left: 50%; bottom: -15px; margin-left: -14px; }
+#sub-toggle .ic { transition: transform var(--panel-t) var(--ease-out); }
+#sub-toggle[aria-expanded="true"] .ic { transform: rotate(180deg); }
+#subpanel { top: 82px; left: 16px; width: 300px; padding: 14px 14px 12px; transform-origin: top left; }
+#subpanel.collapsed { transform: translateY(-6px); }
+#subpanel .title-row { margin-bottom: 10px; }
+#subpanel .doc-title { font-weight: 600; font-size: 15px; width: 100%; border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 3px 6px; margin-left: -6px; }
+#subpanel .doc-title:enabled:hover, #subpanel .doc-title:focus { border-color: var(--rule); background: var(--bg); outline: none; }
+#subpanel .file-name { color: var(--muted); font: 500 11.5px var(--font-mono); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#subpanel .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.textbtn { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px; text-align: left; transition: background var(--fast) ease; }
+.textbtn:hover { background: var(--hover); }
+.textbtn .ic { width: 17px; height: 17px; color: var(--muted); }
+
+/* View menu, context menu */
+.menu {
+  position: fixed; z-index: 40; min-width: 190px; padding: 5px;
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; box-shadow: var(--shadow);
+  transform-origin: top left; animation: menu-in 140ms var(--ease-out);
+}
+.menu[hidden] { display: none; }
+.menu button { display: flex; width: 100%; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 7px; text-align: left; }
+.menu button:hover, .menu button.active { background: var(--hover); }
+.menu button .ic { width: 17px; height: 17px; color: var(--muted); }
+.menu button .kbd { margin-left: auto; color: var(--muted); font: 500 11px var(--font-mono); }
+.menu button[aria-checked="true"] { color: var(--brass-text); font-weight: 600; }
+.menu button[aria-checked="true"] .ic { color: var(--brass-text); }
+.menu button.danger { color: var(--danger); }
+.menu button.danger .ic { color: var(--danger); }
+.menu .menu-sep { height: 1px; background: var(--rule); margin: 4px 6px; }
+@keyframes menu-in { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+
+/* Legend (bottom left) */
+#legend { left: 16px; bottom: 16px; min-width: 190px; max-width: 280px; max-height: 42vh; padding: 12px 10px 10px; display: flex; flex-direction: column; }
+#legend.collapsed { transform: translateY(12px); }
+#legend-collapse { position: absolute; top: -14px; left: 50%; margin-left: -14px; }
+#legend-open { left: 16px; bottom: 16px; }
+#legend .eyebrow { padding: 0 6px 6px; }
+#legend ul { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+#legend li { display: flex; align-items: center; gap: 10px; padding: 5px 6px; border-radius: 7px; transition: background var(--fast) ease; }
+#legend li:hover { background: var(--hover); }
+.swatch { width: 16px; height: 16px; border-radius: 4px; flex: none; border: 1px solid var(--tile-stroke); }
+.swatch.unassigned, .hatch { background: repeating-linear-gradient(135deg, var(--unassigned) 0 3px, color-mix(in srgb, var(--unassigned) 70%, #fff) 3px 5px); }
+button.swatch { cursor: pointer; }
+#legend .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#legend .count { color: var(--muted); font: 500 11px var(--font-mono); }
+#legend input.name { border: 1px solid var(--rule); background: var(--bg); border-radius: 5px; padding: 1px 5px; }
+#legend .rm { opacity: 0; color: var(--muted); border-radius: 5px; width: 22px; height: 22px; display: grid; place-items: center; }
+#legend li:hover .rm { opacity: 1; }
+#legend .rm:hover { color: var(--danger); background: var(--hover); }
+#legend .add { margin-top: 4px; color: var(--muted); }
+#legend .empty-note { color: var(--muted); padding: 2px 6px 4px; font-size: 13px; }
+.palette { display: grid; grid-template-columns: repeat(5, 22px); gap: 6px; padding: 8px; }
+.palette button { width: 22px; height: 22px; border-radius: 5px; border: 1px solid var(--tile-stroke); }
+.palette button[aria-checked="true"] { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+/* Detail panel (right) */
+#detail { top: 16px; right: 16px; bottom: 16px; width: 372px; display: flex; flex-direction: column; }
+#detail.collapsed { transform: translateX(16px); }
+#detail-collapse { position: absolute; left: -18px; top: 50%; margin-top: -18px; }
+#detail-open { right: 16px; top: 50%; margin-top: -18px; }
+#detail .head { padding: 16px 18px 14px; border-bottom: 1px solid var(--rule); display: flex; gap: 14px; align-items: flex-start; }
+#detail .head .col { min-width: 0; }
+#detail .head .col.main { flex: 1; }
+#detail .head .eyebrow { margin-bottom: 6px; }
+#detail .name { font-size: 20px; font-weight: 600; line-height: 1.25; letter-spacing: -.005em; overflow-wrap: anywhere; }
+#detail input.name { width: 100%; border: 1px solid transparent; border-radius: 7px; padding: 2px 6px; margin-left: -7px; background: transparent; }
+#detail input.name:hover { border-color: var(--rule); }
+#detail input.name:focus { border-color: var(--brass); background: var(--bg); outline: none; }
+#detail .body { flex: 1; overflow-y: auto; padding: 14px 18px 20px; scrollbar-gutter: stable; }
+#detail .placeholder { color: var(--muted); padding: 24px 18px; }
+#detail .placeholder p { margin: 0 0 8px; }
+#detail section { margin-bottom: 18px; }
+#detail section > .sec-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+#detail section > .sec-head .ic { color: var(--ink); width: 19px; height: 19px; }
+#detail .desc { white-space: pre-wrap; overflow-wrap: anywhere; }
+#detail .desc.empty { color: var(--muted); }
+#detail textarea.desc { width: 100%; min-height: 64px; resize: vertical; border: 1px dashed var(--rule-strong); border-radius: 8px; padding: 7px 9px; background: transparent; line-height: 1.45; }
+#detail textarea.desc:focus { border-style: solid; border-color: var(--brass); background: var(--bg); outline: none; }
+#detail .none { color: var(--muted); font-size: 13px; padding: 2px 0 4px; }
+#detail .cadence { display: flex; align-items: center; gap: 10px; }
+#detail .cadence .val { font: 500 13px var(--font-mono); }
+#detail select { border: 1px solid var(--rule-strong); border-radius: 7px; padding: 4px 8px; background: var(--surface); }
+#detail .foot { padding-top: 6px; border-top: 1px solid var(--rule); margin-top: 8px; }
+#detail .delete { color: var(--danger); display: inline-flex; gap: 8px; align-items: center; padding: 7px 10px; border-radius: 8px; margin-top: 8px; }
+#detail .delete:hover { background: var(--hover); }
+
+.row { position: relative; display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.row + .note, .row + .note-input { margin: 0 0 6px 0; }
+.row .go {
+  position: absolute; left: -17px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--ink); color: var(--bg); opacity: 0; transform: translateX(4px); pointer-events: none;
+  transition: opacity var(--fast) ease, transform var(--fast) var(--ease-out);
+}
+.row .go .ic { width: 14px; height: 14px; stroke-width: 2.5; }
+.row:hover .go { opacity: 1; transform: none; }
+.tile {
+  display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 5px 12px; border-radius: 8px;
+  max-width: 210px; min-width: 0; flex: 0 1 auto; text-align: left; line-height: 1.25; font-weight: 500; font-size: 13.5px;
+  transition: transform var(--fast) var(--ease-out), box-shadow var(--fast) ease;
+}
+.tile:hover { box-shadow: 0 0 0 2px var(--brass); }
+.tile:active { transform: scale(.98); }
+.tile.role { color: var(--on-tile); border: 1px solid var(--tile-stroke); font-weight: 600; }
+.tile.process { background: var(--surface); border: 1.5px solid var(--ink); }
+.tile.meeting, .tile.document { background: var(--surface); border: 1px solid var(--rule-strong); }
+.tile .ic { width: 16px; height: 16px; color: var(--muted); }
+.tile.dept { cursor: default; }
+.tile.dept:hover { box-shadow: none; }
+button.tile.dept { cursor: pointer; }
+button.tile.dept:hover { box-shadow: 0 0 0 2px var(--brass); }
+.tags { display: flex; gap: 5px; flex-wrap: nowrap; align-items: center; margin-left: auto; flex: none; }
+.raci {
+  width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  font: 500 12px var(--font-mono); background: var(--ink); color: var(--surface); position: relative;
+}
+.raci.has-note::after { content: ""; position: absolute; top: -1px; right: -1px; width: 7px; height: 7px; border-radius: 50%; background: var(--brass); box-shadow: 0 0 0 1.5px var(--surface); }
+button.raci { background: transparent; color: var(--muted); border: 1px solid var(--rule-strong); transition: background var(--fast) ease, color var(--fast) ease; }
+button.raci:hover { color: var(--ink); border-color: var(--ink); }
+button.raci[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.tag {
+  font: 500 10.5px var(--font-mono); letter-spacing: .06em; text-transform: uppercase;
+  padding: 4px 8px; border-radius: 999px; background: var(--ink); color: var(--surface); border: 1px solid var(--ink);
+}
+.tag.outline { background: transparent; color: var(--ink); }
+button.tag { background: transparent; color: var(--muted); border-color: var(--rule-strong); transition: background var(--fast) ease, color var(--fast) ease; }
+button.tag:hover { color: var(--ink); border-color: var(--ink); }
+button.tag[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+button.tag:disabled { cursor: default; }
+.rm-link { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; color: var(--muted); flex: none; }
+.rm-link:hover { color: var(--danger); background: var(--hover); }
+.note { color: var(--muted); font-size: 12.5px; padding-left: 12px; }
+.note-input { width: calc(100% - 12px); margin-left: 12px !important; border: 1px dashed var(--rule-strong); border-radius: 6px; padding: 3px 7px; font-size: 12.5px; background: transparent; color: var(--muted); }
+.note-input:focus { border-style: solid; border-color: var(--brass); color: var(--ink); outline: none; background: var(--bg); }
+
+/* Search-to-find */
+.finder { position: relative; margin-top: 6px; }
+.finder input { width: 100%; border: 1px dashed var(--rule-strong); border-radius: 8px; padding: 6px 10px 6px 32px; background: transparent; }
+.finder input:focus { border-style: solid; border-color: var(--brass); background: var(--bg); outline: none; }
+.finder > .ic { position: absolute; left: 9px; top: 8px; width: 16px; height: 16px; color: var(--muted); }
+.finder .results { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5; max-height: 240px; overflow-y: auto; padding: 4px; background: var(--surface); border: 1px solid var(--rule); border-radius: 9px; box-shadow: var(--shadow); }
+.finder .results[hidden] { display: none; }
+.finder .results button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: 6px; text-align: left; }
+.finder .results button.active { background: var(--hover); }
+.finder .results .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.finder .results .create { color: var(--brass-text); font-weight: 600; }
+.finder .results .empty { color: var(--muted); padding: 6px 8px; font-size: 13px; }
+
+/* Search bar (top) */
+#search {
+  position: fixed; z-index: 20; top: 14px; left: 50%; width: min(460px, 44vw); margin-left: calc(min(460px, 44vw) / -2);
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 999px; box-shadow: var(--shadow);
+  transform: translateY(-72px); opacity: 0;
+  transition: transform var(--panel-t) var(--ease-out), opacity var(--panel-t) ease;
+}
+body.editing #search { top: 34px; }
+#search.show { transform: none; opacity: 1; }
+#search input { flex: 1; border: 0; background: transparent; outline: none; min-width: 0; }
+#search .count { color: var(--muted); font: 500 11.5px var(--font-mono); white-space: nowrap; }
+#search .ic { color: var(--muted); }
+#search .clear { color: var(--muted); border-radius: 50%; width: 22px; height: 22px; display: grid; place-items: center; }
+#search .clear:hover { background: var(--hover); color: var(--ink); }
+
+/* Edit mode banner */
+#edit-banner { position: fixed; z-index: 19; top: 0; left: 0; right: 0; height: 3px; background: var(--brass); pointer-events: none; transform: scaleY(0); transform-origin: top; transition: transform var(--panel-t) var(--ease-out); }
+#edit-banner span {
+  position: absolute; top: 3px; left: 50%; transform: translateX(-50%);
+  padding: 3px 12px 4px; border-radius: 0 0 7px 7px; background: var(--brass); color: #1B2430;
+  font: 500 11px var(--font-mono); letter-spacing: .16em; text-transform: uppercase;
+}
+body.editing #edit-banner { transform: none; }
+body:not(.editing) #edit-banner span { display: none; }
+
+/* Zoom controls (bottom middle) */
+#zoomctl {
+  position: fixed; z-index: 12; bottom: 18px; left: 50%; transform: translate(-50%, 10px); opacity: 0; pointer-events: none;
+  display: flex; gap: 2px; padding: 4px; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; box-shadow: var(--shadow);
+  transition: transform var(--panel-t) var(--ease-out), opacity var(--panel-t) ease;
+}
+#zoomctl.show { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
+#zoomctl .iconbtn { width: 34px; height: 34px; }
+
+/* Empty state */
+#empty { position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 5; }
+#empty[hidden] { display: none; }
+#empty .card-e { pointer-events: auto; text-align: center; max-width: 420px; padding: 34px 36px 30px; }
+#empty .mark { width: 76px; height: 76px; margin: 0 auto 14px; color: var(--ink); }
+#empty .mark .planet { fill: var(--brass); stroke: none; }
+#empty h1 { font: italic 400 44px/1 var(--font-eyebrow); margin: 0 0 10px; letter-spacing: -.01em; }
+#empty p { color: var(--muted); margin: 0 0 20px; }
+#empty .btns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+#empty .hint { color: var(--muted); font-size: 15px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 9px; font-weight: 600; border: 1px solid var(--rule-strong); background: var(--surface); transition: background var(--fast) ease, transform var(--fast) var(--ease-out); }
+.btn:hover { background: var(--hover); }
+.btn:active { transform: scale(.97); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { background: var(--brass-text); border-color: var(--brass-text); }
+.btn .ic { width: 17px; height: 17px; }
+
+/* Toast, tooltip, drop overlay */
+#toast { position: fixed; z-index: 50; left: 50%; bottom: 72px; transform: translate(-50%, 8px); opacity: 0; pointer-events: none; max-width: min(560px, 80vw);
+  padding: 9px 16px; border-radius: 10px; background: var(--ink); color: var(--bg); box-shadow: var(--shadow); font-weight: 500;
+  transition: transform var(--panel-t) var(--ease-out), opacity var(--panel-t) ease; }
+#toast.show { transform: translate(-50%, 0); opacity: 1; }
+#toast.error { background: var(--danger); color: #fff; }
+#tooltip { position: fixed; z-index: 60; max-width: 240px; padding: 7px 10px; border-radius: 8px; background: var(--surface); color: var(--ink); border: 1px solid var(--rule-strong); box-shadow: var(--shadow); font-size: 12.5px; pointer-events: none; opacity: 0; transition: opacity 120ms ease; }
+#tooltip.show { opacity: 1; }
+#drop { position: fixed; inset: 10px; z-index: 70; border: 2px dashed var(--brass); border-radius: 18px; background: var(--brass-wash); display: grid; place-items: center; font: italic 28px var(--font-eyebrow); pointer-events: none; }
+#drop[hidden] { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- Icon sprite (Lucide-style strokes) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-open" viewBox="0 0 24 24"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></symbol>
+    <symbol id="i-forward" viewBox="0 0 24 24"><path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-cog" viewBox="0 0 24 24"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"/><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 2v2"/><path d="M12 22v-2"/><path d="m17 20.66-1-1.73"/><path d="M11 10.27 7 3.34"/><path d="m20.66 17-1.73-1"/><path d="m3.34 7 1.73 1"/><path d="M14 12h8"/><path d="M2 12h2"/><path d="m20.66 7-1.73 1"/><path d="m3.34 17 1.73-1"/><path d="m17 3.34-1 1.73"/><path d="m11 13.73-4 6.93"/></symbol>
+    <symbol id="i-meeting" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-docs" viewBox="0 0 24 24"><path d="M20 7h-3a2 2 0 0 1-2-2V2"/><path d="M9 18a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7l4 4v10a2 2 0 0 1-2 2Z"/><path d="M3 7.6v12.8A1.6 1.6 0 0 0 4.6 22h9.8"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></symbol>
+    <symbol id="i-person" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-fit" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></symbol>
+    <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+    <symbol id="i-new" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M9 15h6"/><path d="M12 18v-6"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></symbol>
+    <symbol id="i-graph" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98"/><path d="m15.41 6.51-6.82 3.98"/></symbol>
+    <symbol id="i-columns" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></symbol>
+    <symbol id="i-unpin" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.89"/><path d="m2 2 20 20"/><path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11"/></symbol>
+    <pattern id="hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><rect width="6" height="6" style="fill: var(--unassigned)"/><rect width="2.2" height="6" style="fill: rgba(255,255,255,.2)"/></pattern>
+  </defs>
+</svg>
+
+<svg id="stage" role="application" aria-label="Organisation graph">
+  <g class="world">
+    <g class="orbits"></g>
+    <g class="headers"></g>
+    <g class="edges"></g>
+    <g class="cards"></g>
+    <line class="rubber" hidden></line>
+  </g>
+</svg>
+
+<div id="empty" hidden>
+  <div class="card-e">
+    <svg class="mark" viewBox="0 0 80 80" aria-hidden="true">
+      <circle cx="40" cy="40" r="36" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".35"/>
+      <circle cx="40" cy="40" r="23" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>
+      <circle cx="40" cy="40" r="6" fill="currentColor"/>
+      <circle class="planet" cx="63" cy="40" r="4.5"/>
+      <circle cx="14.5" cy="25" r="3.2" fill="currentColor" opacity=".7"/>
+    </svg>
+    <div class="content"></div>
+  </div>
+</div>
+
+<div id="edit-banner" aria-hidden="true"><span>Edit mode</span></div>
+
+<div id="search" role="search">
+  <svg class="ic sm"><use href="#i-search"/></svg>
+  <input id="search-input" type="search" placeholder="Search roles, processes, meetings, documents" aria-label="Search" autocomplete="off" spellcheck="false">
+  <span class="count" aria-live="polite"></span>
+  <button class="clear" title="Clear search" aria-label="Clear search" hidden><svg class="ic sm"><use href="#i-x"/></svg></button>
+</div>
+
+<section id="toolbar" class="panel" aria-label="File and view controls">
+  <button class="iconbtn" id="btn-open" title="Open file (Ctrl+O)" aria-label="Open file"><svg class="ic"><use href="#i-open"/></svg></button>
+  <button class="iconbtn" id="btn-save" title="Save (Ctrl+S)" aria-label="Save"><svg class="ic"><use href="#i-save"/></svg></button>
+  <button class="iconbtn" id="btn-view" title="Change view" aria-label="Change view" aria-haspopup="menu"><svg class="ic"><use href="#i-eye"/></svg></button>
+  <span class="sep"></span>
+  <button class="iconbtn" id="btn-back" title="Back (Alt+←)" aria-label="Back"><svg class="ic"><use href="#i-back"/></svg></button>
+  <button class="iconbtn" id="btn-forward" title="Forward (Alt+→)" aria-label="Forward"><svg class="ic"><use href="#i-forward"/></svg></button>
+  <span class="sep"></span>
+  <button class="iconbtn" id="btn-undo" title="Undo (Ctrl+Z)" aria-label="Undo"><svg class="ic"><use href="#i-undo"/></svg></button>
+  <button class="iconbtn" id="btn-redo" title="Redo (Ctrl+Y)" aria-label="Redo"><svg class="ic"><use href="#i-redo"/></svg></button>
+  <span class="sep"></span>
+  <button class="iconbtn" id="btn-edit" title="Edit mode (E)" aria-label="Edit mode" aria-pressed="false"><svg class="ic"><use href="#i-pencil"/></svg></button>
+  <button class="orb small" id="toolbar-collapse" title="Hide controls" aria-label="Hide controls"><svg class="ic"><use href="#i-left"/></svg></button>
+  <button class="orb small" id="sub-toggle" title="More controls" aria-label="More controls" aria-expanded="false" aria-controls="subpanel"><svg class="ic"><use href="#i-down"/></svg></button>
+</section>
+<button class="orb" id="toolbar-open" title="Show controls" aria-label="Show controls" hidden><svg class="ic"><use href="#i-right"/></svg></button>
+
+<section id="subpanel" class="panel collapsed" aria-label="More controls">
+  <div class="title-row">
+    <input class="doc-title" id="doc-title" aria-label="Organisation title" disabled>
+    <div class="file-name" id="file-name"></div>
+  </div>
+  <div class="actions">
+    <button class="textbtn" id="btn-reset"><svg class="ic"><use href="#i-reset"/></svg>Reset view</button>
+    <button class="textbtn" id="btn-fit"><svg class="ic"><use href="#i-fit"/></svg>Fit to screen</button>
+    <button class="textbtn" id="btn-theme"><svg class="ic"><use href="#i-moon"/></svg><span>Dark mode</span></button>
+    <button class="textbtn" id="btn-saveas"><svg class="ic"><use href="#i-download"/></svg>Save as…</button>
+    <button class="textbtn" id="btn-new"><svg class="ic"><use href="#i-new"/></svg>New blank</button>
+    <button class="textbtn" id="btn-example"><svg class="ic"><use href="#i-book"/></svg>Load example</button>
+  </div>
+</section>
+
+<section id="legend" class="panel" aria-label="Departments">
+  <button class="orb small" id="legend-collapse" title="Hide departments" aria-label="Hide departments"><svg class="ic"><use href="#i-down"/></svg></button>
+  <div class="eyebrow">Departments</div>
+  <ul></ul>
+</section>
+<button class="orb" id="legend-open" title="Show departments" aria-label="Show departments" hidden><svg class="ic"><use href="#i-up"/></svg></button>
+
+<aside id="detail" class="panel" aria-label="Selected item">
+  <button class="orb" id="detail-collapse" title="Hide details" aria-label="Hide details"><svg class="ic"><use href="#i-right"/></svg></button>
+  <div class="inner" style="display:contents"></div>
+</aside>
+<button class="orb" id="detail-open" title="Show details" aria-label="Show details" hidden><svg class="ic"><use href="#i-left"/></svg></button>
+
+<div id="zoomctl" aria-label="Zoom">
+  <button class="iconbtn" id="btn-zoom-out" title="Zoom out" aria-label="Zoom out"><svg class="ic"><use href="#i-minus"/></svg></button>
+  <button class="iconbtn" id="btn-zoom-fit" title="Fit to screen (F)" aria-label="Fit to screen"><svg class="ic"><use href="#i-fit"/></svg></button>
+  <button class="iconbtn" id="btn-zoom-in" title="Zoom in" aria-label="Zoom in"><svg class="ic"><use href="#i-plus"/></svg></button>
+</div>
+
+<div id="menu" class="menu" role="menu" hidden></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="tooltip" role="tooltip"></div>
+<div id="drop" hidden>Drop to open</div>
+<input type="file" id="file-input" accept=".json,application/json" hidden>
+
+<script>
+'use strict';
+/* ═══════════════════════════ Constants ═══════════════════════════ */
+const FORMAT = '0.1';
+const CADENCES = ['yearly', 'bi-yearly', 'quarterly', 'monthly', 'fortnightly', 'weekly', 'bi-weekly', 'daily'];
+const CADENCE_LABEL = { 'yearly': 'Yearly', 'bi-yearly': 'Bi-yearly', 'quarterly': 'Quarterly', 'monthly': 'Monthly', 'fortnightly': 'Fortnightly', 'weekly': 'Weekly', 'bi-weekly': 'Bi-weekly', 'daily': 'Daily' };
+const RACI = ['R', 'A', 'C', 'I'];
+const RACI_NAME = { R: 'Responsible', A: 'Accountable', C: 'Consulted', I: 'Informed' };
+const PALETTE = [
+  { name: 'Blue', hex: '#2F5D8A' }, { name: 'Plum', hex: '#86397A' }, { name: 'Green', hex: '#3B7447' },
+  { name: 'Rust', hex: '#A0482A' }, { name: 'Indigo', hex: '#4E4596' }, { name: 'Teal', hex: '#1F6F6C' },
+  { name: 'Claret', hex: '#8C2F45' }, { name: 'Olive', hex: '#5E6B1F' }, { name: 'Slate', hex: '#4A5868' },
+  { name: 'Sienna', hex: '#8A5A1C' },
+];
+const TYPES = {
+  role:     { list: 'roles',     label: 'Role',     prefix: 'rol', icon: 'i-person' },
+  process:  { list: 'processes', label: 'Process',  prefix: 'pro', icon: 'i-cog' },
+  meeting:  { list: 'meetings',  label: 'Meeting',  prefix: 'mtg', icon: 'i-meeting' },
+  document: { list: 'documents', label: 'Document', prefix: 'doc', icon: 'i-docs' },
+};
+const VIEWS = [
+  { id: 'graph',   label: 'Graph',         icon: 'i-graph',   key: '1' },
+  { id: 'process', label: 'Process table', icon: 'i-columns', key: '2' },
+  { id: 'role',    label: 'Role table',    icon: 'i-columns', key: '3' },
+  { id: 'meeting', label: 'Meeting table', icon: 'i-columns', key: '4' },
+];
+const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)');
+const dur = ms => (REDUCED.matches ? 0 : ms);
+
+const EXAMPLE = {
+  "orrery": "0.1",
+  "title": "Product organisation",
+  "departments": [
+    { "id": "dep-research", "name": "Research", "colour": "#86397A" },
+    { "id": "dep-design", "name": "Design", "colour": "#2F5D8A" },
+    { "id": "dep-marketing", "name": "Marketing", "colour": "#3B7447" }
+  ],
+  "roles": [
+    { "id": "rol-research-manager", "name": "Research Manager", "description": "Sets the research strategy and decides which early ideas are worth taking into product design.", "department": "dep-research" },
+    { "id": "rol-scientist", "name": "Scientist", "description": "Runs experiments and turns results into evidence the design team can build on.", "department": "dep-research" },
+    { "id": "rol-project-lead", "name": "Project lead", "description": "Keeps research projects on schedule and makes sure findings reach the right people.", "department": "dep-research" },
+    { "id": "rol-engineering-manager", "name": "Engineering Manager", "description": "Owns engineering capacity and signs off on what the team commits to deliver.", "department": "dep-design" },
+    { "id": "rol-system-engineer", "name": "System Engineer", "description": "Holds the system view: requirements, interfaces and the trade-offs between them.", "department": "dep-design" },
+    { "id": "rol-design-engineer", "name": "Design Engineer", "description": "Turns agreed requirements into detailed designs and prototypes.", "department": "dep-design" },
+    { "id": "rol-marketing-manager", "name": "Marketing manager", "description": "Decides how and when new products are announced to customers.", "department": "dep-marketing" },
+    { "id": "rol-market-analyst", "name": "Market analyst", "description": "Brings market data and customer insight into product decisions.", "department": "dep-marketing" }
+  ],
+  "processes": [
+    {
+      "id": "pro-early-product-design",
+      "name": "Early product design",
+      "description": "Takes a promising research result and shapes it into a product concept with a first technical feasibility assessment.",
+      "roles": [
+        { "role": "rol-research-manager", "raci": ["R"], "note": "Responsible for proposing research strategy" },
+        { "role": "rol-scientist", "raci": ["C"], "note": "" },
+        { "role": "rol-project-lead", "raci": ["C"], "note": "" },
+        { "role": "rol-engineering-manager", "raci": ["A"], "note": "" },
+        { "role": "rol-system-engineer", "raci": ["R"], "note": "Responsible for convening Quarterly product design review" },
+        { "role": "rol-design-engineer", "raci": ["I"], "note": "" }
+      ],
+      "meetings": ["mtg-quarterly-design-review"],
+      "documents": ["doc-product-initiation", "doc-technical-feasibility"]
+    },
+    {
+      "id": "pro-product-marketing-announcement",
+      "name": "Product marketing announcement",
+      "description": "Prepares and releases the public announcement of a new product.",
+      "roles": [
+        { "role": "rol-marketing-manager", "raci": ["A"], "note": "" },
+        { "role": "rol-market-analyst", "raci": ["R"], "note": "" },
+        { "role": "rol-system-engineer", "raci": ["C"], "note": "Checks technical claims in the announcement" },
+        { "role": "rol-engineering-manager", "raci": ["I"], "note": "" }
+      ],
+      "meetings": [],
+      "documents": ["doc-product-announcement"]
+    }
+  ],
+  "meetings": [
+    {
+      "id": "mtg-quarterly-design-review",
+      "name": "Quarterly product design review",
+      "description": "Reviews the concepts in early design and decides which move forward.",
+      "cadence": "quarterly",
+      "roles": [
+        { "role": "rol-system-engineer", "chair": true, "mandatory": true },
+        { "role": "rol-research-manager", "chair": false, "mandatory": true },
+        { "role": "rol-scientist", "chair": false, "mandatory": false },
+        { "role": "rol-project-lead", "chair": false, "mandatory": false },
+        { "role": "rol-engineering-manager", "chair": false, "mandatory": true },
+        { "role": "rol-design-engineer", "chair": false, "mandatory": false }
+      ]
+    }
+  ],
+  "documents": [
+    { "id": "doc-product-initiation", "name": "Product initiation document", "description": "Describes the concept, the customer need and the case for starting design work.", "owners": ["rol-system-engineer"], "reviewers": ["rol-research-manager", "rol-engineering-manager"] },
+    { "id": "doc-technical-feasibility", "name": "Technical feasibility document", "description": "Assesses whether the concept can be built, and at what risk.", "owners": ["rol-design-engineer"], "reviewers": ["rol-system-engineer"] },
+    { "id": "doc-product-announcement", "name": "Product announcement", "description": "The public announcement text and its supporting material.", "owners": ["rol-marketing-manager"], "reviewers": ["rol-market-analyst", "rol-system-engineer"] }
+  ],
+  "layout": {}
+};
+
+/* ═══════════════════════════ Small helpers ═══════════════════════════ */
+const $ = (s, root = document) => root.querySelector(s);
+const $$ = (s, root = document) => Array.from(root.querySelectorAll(s));
+const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+const str = v => (typeof v === 'string' ? v : v == null ? '' : String(v));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+
+/** Build a DOM element: h('div', {class:'x', onclick}, child, 'text', [more]) */
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  if (attrs) for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else if (k === 'class') el.className = v;
+    else if (k === 'text') el.textContent = v;
+    else if (k === 'style') el.style.cssText = v;
+    else if (k === 'value') el.value = v;
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(kid));
+  return el;
+}
+function icon(id, cls = 'ic') {
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  s.setAttribute('class', cls); s.setAttribute('aria-hidden', 'true');
+  const u = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  u.setAttribute('href', '#' + id); s.append(u);
+  return s;
+}
+function hashStr(s) { let x = 2166136261; for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619); } return x >>> 0; }
+const jitter = (id, k = 1) => ((hashStr(id + ':' + k) % 1000) / 1000 - 0.5);
+
+/* ═══════════════════════════ Store ═══════════════════════════ */
+const S = {
+  data: null,
+  fileHandle: null,
+  fileName: null,
+  dirty: false,
+  undo: [], redo: [],
+  view: 'graph',
+  sel: null,            // entity id or null
+  hist: [], histIdx: -1,
+  edit: false,
+  hover: null,          // entity id under pointer
+  legendHover: null,    // department id, '__none', or null
+  search: '',
+};
+let idx = null;         // derived index, rebuilt on every change
+
+function emptyData() {
+  return { orrery: FORMAT, title: 'Untitled organisation', departments: [], roles: [], processes: [], meetings: [], documents: [], layout: {} };
+}
+
+/** Make any parsed JSON into a valid model. Returns { data, dropped }. Unknown fields are kept. */
+function normalise(input) {
+  let dropped = 0;
+  const src = isObj(input) ? input : {};
+  const seen = new Set();
+  const uid = (raw, prefix) => {
+    let id = str(raw).trim();
+    if (!id || seen.has(id)) { if (id) dropped++; id = newId(prefix, seen); }
+    seen.add(id);
+    return id;
+  };
+  const list = (v) => (Array.isArray(v) ? v.filter(isObj) : []);
+  const d = { ...src, orrery: FORMAT, title: str(src.title).trim() || 'Untitled organisation' };
+
+  const usedColours = new Set();
+  d.departments = list(src.departments).map(x => {
+    const colour = /^#[0-9a-f]{6}$/i.test(str(x.colour)) ? x.colour.toUpperCase() : null;
+    if (colour) usedColours.add(colour);
+    return { ...x, id: uid(x.id, 'dep'), name: str(x.name), colour };
+  });
+  for (const dep of d.departments) if (!dep.colour) { dep.colour = nextColour(d.departments.map(x => x.colour)); }
+  const depIds = new Set(d.departments.map(x => x.id));
+
+  d.roles = list(src.roles).map(x => {
+    let department = x.department == null || x.department === '' ? null : str(x.department);
+    if (department && !depIds.has(department)) { dropped++; department = null; }
+    return { ...x, id: uid(x.id, 'rol'), name: str(x.name), description: str(x.description), department };
+  });
+  const roleIds = new Set(d.roles.map(x => x.id));
+  const rawProcesses = list(src.processes).map(x => ({ ...x, id: uid(x.id, 'pro') }));
+  const rawMeetings = list(src.meetings).map(x => ({ ...x, id: uid(x.id, 'mtg') }));
+  const rawDocs = list(src.documents).map(x => ({ ...x, id: uid(x.id, 'doc') }));
+  const mtgIds = new Set(rawMeetings.map(x => x.id));
+  const docIds = new Set(rawDocs.map(x => x.id));
+
+  const refList = (arr, valid) => {
+    const out = [];
+    for (const r of Array.isArray(arr) ? arr : []) {
+      const id = str(r);
+      if (!valid.has(id)) { dropped++; continue; }
+      if (!out.includes(id)) out.push(id);
+    }
+    return out;
+  };
+  const roleLinks = (arr, shape) => {
+    const out = [], got = new Set();
+    for (const r of Array.isArray(arr) ? arr : []) {
+      const link = isObj(r) ? r : { role: r };
+      const id = str(link.role);
+      if (!roleIds.has(id)) { dropped++; continue; }
+      if (got.has(id)) continue;
+      got.add(id);
+      out.push(shape({ ...link, role: id }));
+    }
+    return out;
+  };
+
+  d.processes = rawProcesses.map(x => ({
+    ...x, name: str(x.name), description: str(x.description),
+    roles: roleLinks(x.roles, l => ({
+      ...l,
+      raci: RACI.filter(k => (Array.isArray(l.raci) ? l.raci : str(l.raci).split('')).map(v => str(v).toUpperCase()).includes(k)),
+      note: str(l.note),
+    })),
+    meetings: refList(x.meetings, mtgIds),
+    documents: refList(x.documents, docIds),
+  }));
+  d.meetings = rawMeetings.map(x => ({
+    ...x, name: str(x.name), description: str(x.description),
+    cadence: CADENCES.includes(str(x.cadence).toLowerCase()) ? str(x.cadence).toLowerCase() : null,
+    roles: roleLinks(x.roles, l => ({ ...l, chair: !!l.chair, mandatory: !!l.mandatory })),
+  }));
+  d.documents = rawDocs.map(x => ({
+    ...x, name: str(x.name), description: str(x.description),
+    owners: refList(x.owners, roleIds), reviewers: refList(x.reviewers, roleIds),
+  }));
+  // A role can't both own and review in the model we show; keep owner if both.
+  for (const doc of d.documents) doc.reviewers = doc.reviewers.filter(r => !doc.owners.includes(r));
+
+  d.layout = {};
+  const nodeIds = new Set([...roleIds, ...d.processes.map(p => p.id)]);
+  if (isObj(src.layout)) for (const [k, v] of Object.entries(src.layout)) {
+    if (nodeIds.has(k) && isObj(v) && Number.isFinite(+v.x) && Number.isFinite(+v.y)) d.layout[k] = { x: Math.round(+v.x), y: Math.round(+v.y) };
+  }
+  // Canonical key order for the file: known keys first, then any extras the file carried.
+  const ordered = { orrery: d.orrery, title: d.title, departments: d.departments, roles: d.roles, processes: d.processes, meetings: d.meetings, documents: d.documents, layout: d.layout };
+  for (const [k, v] of Object.entries(d)) if (!(k in ordered)) ordered[k] = v;
+  return { data: ordered, dropped };
+}
+
+function newId(prefix, taken) {
+  const has = taken ? (id => taken.has(id)) : (id => idx && idx.byId.has(id));
+  let id;
+  do { id = prefix + '-' + Math.random().toString(36).slice(2, 8); } while (has(id));
+  return id;
+}
+function nextColour(used) {
+  const u = new Set(used.filter(Boolean).map(c => c.toUpperCase()));
+  const free = PALETTE.find(p => !u.has(p.hex));
+  return (free || PALETTE[u.size % PALETTE.length]).hex;
+}
+
+/** Derived lookups. Rebuilt whenever data changes (cheap at this scale). */
+function buildIndex(d) {
+  const I = {
+    byId: new Map(), dept: new Map(),
+    roleProcs: new Map(), roleMeetings: new Map(), roleDocs: new Map(),
+    procsOf: new Map(),   // meeting/document id -> [process]
+    deptRoles: new Map(), // dept id | '__none' -> [role]
+  };
+  for (const dep of d.departments) { I.dept.set(dep.id, dep); I.deptRoles.set(dep.id, []); }
+  I.deptRoles.set('__none', []);
+  for (const [type, t] of Object.entries(TYPES)) for (const item of d[t.list]) I.byId.set(item.id, { type, item });
+  for (const r of d.roles) {
+    I.roleProcs.set(r.id, []); I.roleMeetings.set(r.id, []); I.roleDocs.set(r.id, []);
+    I.deptRoles.get(r.department && I.dept.has(r.department) ? r.department : '__none').push(r);
+  }
+  for (const p of d.processes) {
+    for (const l of p.roles) I.roleProcs.get(l.role)?.push({ process: p, link: l });
+    for (const m of p.meetings) { if (!I.procsOf.has(m)) I.procsOf.set(m, []); I.procsOf.get(m).push(p); }
+    for (const x of p.documents) { if (!I.procsOf.has(x)) I.procsOf.set(x, []); I.procsOf.get(x).push(p); }
+  }
+  for (const m of d.meetings) for (const l of m.roles) I.roleMeetings.get(l.role)?.push({ meeting: m, link: l });
+  for (const doc of d.documents) {
+    for (const r of doc.owners) I.roleDocs.get(r)?.push({ document: doc, own: true, review: false });
+    for (const r of doc.reviewers) I.roleDocs.get(r)?.push({ document: doc, own: false, review: true });
+  }
+  return I;
+}
+const get = id => (id && idx.byId.get(id)) || null;
+const typeOf = id => get(id)?.type || null;
+const itemOf = id => get(id)?.item || null;
+const deptOf = role => (role && role.department && idx.dept.get(role.department)) || null;
+const roleColour = role => deptOf(role)?.colour || null;
+const displayName = (item, type) => (item && item.name.trim()) || `Untitled ${TYPES[type || typeOf(item?.id)]?.label.toLowerCase() || 'item'}`;
+/** Departments in legend order, with a synthetic "Unassigned" when needed. */
+function deptOrder() {
+  const out = S.data.departments.map(d => ({ id: d.id, name: d.name, colour: d.colour }));
+  if (idx.deptRoles.get('__none').length) out.push({ id: '__none', name: 'Unassigned', colour: null });
+  return out;
+}
+function rolesSorted(roleIds) {
+  const order = new Map(deptOrder().map((d, i) => [d.id, i]));
+  return roleIds.map(itemOf).filter(Boolean).sort((a, b) =>
+    (order.get(a.department && idx.dept.has(a.department) ? a.department : '__none') - order.get(b.department && idx.dept.has(b.department) ? b.department : '__none')) || byName(a, b));
+}
+
+/* ═══════════════════════════ Mutations & undo ═══════════════════════════ */
+const UNDO_LIMIT = 100;
+
+/** All edits go through here: snapshot → mutate → re-render. Return false from fn to cancel. */
+function commit(label, fn, { allowOutsideEdit = false } = {}) {
+  if (!S.edit && !allowOutsideEdit) { toast('Turn on edit mode to make changes.'); return false; }
+  const before = structuredClone(S.data);
+  const result = fn(S.data);
+  if (result === false) return false;
+  S.undo.push({ label, data: before, sel: S.sel });
+  if (S.undo.length > UNDO_LIMIT) S.undo.shift();
+  S.redo = [];
+  setDirty(true);
+  refresh();
+  return true;
+}
+function undo() {
+  const step = S.undo.pop();
+  if (!step) return;
+  S.redo.push({ label: step.label, data: structuredClone(S.data), sel: S.sel });
+  restore(step);
+  toast(`Undid ${step.label}`);
+}
+function redo() {
+  const step = S.redo.pop();
+  if (!step) return;
+  S.undo.push({ label: step.label, data: structuredClone(S.data), sel: S.sel });
+  restore(step);
+  toast(`Redid ${step.label}`);
+}
+function restore(step) {
+  const layout = S.data.layout;           // node positions aren't part of undo history
+  S.data = step.data;
+  S.data.layout = Object.fromEntries(Object.entries(layout).filter(([k]) => S.data.roles.some(r => r.id === k) || S.data.processes.some(p => p.id === k)));
+  setDirty(true);
+  idx = buildIndex(S.data);
+  if (S.sel && !idx.byId.has(S.sel)) S.sel = null;
+  refresh();
+}
+function setDirty(v) {
+  S.dirty = v;
+  renderChrome();
+}
+
+// ── Model operations (called inside commit) ──
+function createItem(d, type, props = {}) {
+  const t = TYPES[type];
+  const base = { id: newId(t.prefix), name: '', description: '' };
+  const item =
+    type === 'role' ? { ...base, department: null, ...props } :
+    type === 'process' ? { ...base, roles: [], meetings: [], documents: [], ...props } :
+    type === 'meeting' ? { ...base, cadence: null, roles: [], ...props } :
+    { ...base, owners: [], reviewers: [], ...props };
+  d[t.list].push(item);
+  return item;
+}
+function deleteItem(d, id) {
+  const type = typeOf(id);
+  if (!type) return false;
+  d[TYPES[type].list] = d[TYPES[type].list].filter(x => x.id !== id);
+  if (type === 'role') {
+    for (const p of d.processes) p.roles = p.roles.filter(l => l.role !== id);
+    for (const m of d.meetings) m.roles = m.roles.filter(l => l.role !== id);
+    for (const x of d.documents) { x.owners = x.owners.filter(r => r !== id); x.reviewers = x.reviewers.filter(r => r !== id); }
+  }
+  if (type === 'meeting') for (const p of d.processes) p.meetings = p.meetings.filter(m => m !== id);
+  if (type === 'document') for (const p of d.processes) p.documents = p.documents.filter(m => m !== id);
+  delete d.layout[id];
+  return true;
+}
+const findIn = (d, type, id) => d[TYPES[type].list].find(x => x.id === id);
+function linkRoleProcess(d, roleId, procId) {
+  const p = findIn(d, 'process', procId);
+  if (!p || p.roles.some(l => l.role === roleId)) return false;
+  p.roles.push({ role: roleId, raci: [], note: '' });
+}
+
+/* ═══════════════════════════ Text measuring ═══════════════════════════ */
+const F = {
+  role: '600 13px "Instrument Sans", system-ui, sans-serif',
+  roleHead: '600 13.5px "Instrument Sans", system-ui, sans-serif',
+  proc: '500 14px "Instrument Sans", system-ui, sans-serif',
+  procHead: '600 15px "Instrument Sans", system-ui, sans-serif',
+  row: '500 12.5px "Instrument Sans", system-ui, sans-serif',
+  roleRow: '600 12.5px "Instrument Sans", system-ui, sans-serif',
+  meetHead: '600 14px "Instrument Sans", system-ui, sans-serif',
+  chip: '500 9.5px "IBM Plex Mono", ui-monospace, monospace',
+};
+const measureCtx = document.createElement('canvas').getContext('2d');
+const mcache = new Map();
+function textW(s, font) {
+  const k = font + '|' + s;
+  let v = mcache.get(k);
+  if (v == null) { measureCtx.font = font; v = measureCtx.measureText(s).width; mcache.set(k, v); }
+  return v;
+}
+function ellipsize(s, maxW, font) {
+  if (textW(s, font) <= maxW) return s;
+  while (s.length > 1 && textW(s + '…', font) > maxW) s = s.slice(0, -1);
+  return s.trimEnd() + '…';
+}
+function wrap(text, maxW, font, maxLines = 2) {
+  const words = str(text).split(/\s+/).filter(Boolean);
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    const t = cur ? cur + ' ' + w : w;
+    if (!cur || textW(t, font) <= maxW) cur = t; else { lines.push(cur); cur = w; }
+  }
+  if (cur) lines.push(cur);
+  if (!lines.length) lines.push('');
+  if (lines.length > maxLines) {
+    const keep = lines.slice(0, maxLines);
+    keep[maxLines - 1] = ellipsize(lines.slice(maxLines - 1).join(' '), maxW, font);
+    return keep;
+  }
+  return lines.map(l => ellipsize(l, maxW, font));
+}
+const maxLineW = (lines, font) => Math.max(0, ...lines.map(l => textW(l, font)));
+const chipW = c => Math.ceil(textW(c.t, F.chip) + 11);
+
+/* ═══════════════════════════ Stage: shared refs ═══════════════════════════ */
+const svg = d3.select('#stage');
+const world = svg.select('.world');
+const gOrbits = world.select('.orbits');
+const gHeaders = world.select('.headers');
+const gEdges = world.select('.edges');
+const gCards = world.select('.cards');
+const rubber = world.select('.rubber');
+let currentCards = [];
+let currentHeaders = [];
+let lastPos = new Map();     // entity id -> {x, y} of its first card in the last rendered view
+let morphing = false;
+
+const zoom = d3.zoom()
+  .scaleExtent([0.12, 3])
+  .on('start', (e) => { if (e.sourceEvent && e.sourceEvent.type === 'mousedown') svg.classed('panning', true); })
+  .on('zoom', (e) => world.attr('transform', e.transform))
+  .on('end', () => svg.classed('panning', false));
+svg.call(zoom).on('dblclick.zoom', null);
+
+// Faint concentric orbits give the canvas a sense of place while panning.
+gOrbits.selectAll('circle').data([220, 440, 660, 880, 1100, 1320, 1540]).join('circle').attr('r', r => r);
+
+/* ═══════════════════════════ Graph: simulation ═══════════════════════════ */
+const simNodes = new Map();
+let simStale = false;
+let structureSig = '';
+
+function nodeGeom(item, type) {
+  const name = displayName(item, type);
+  if (type === 'role') {
+    const lines = wrap(name, 124, F.role, 2);
+    return { lines, w: Math.max(96, Math.ceil(maxLineW(lines, F.role)) + 28), h: lines.length * 16 + 18 };
+  }
+  const lines = wrap(name, 150, F.proc, 2);
+  return { lines, w: Math.max(118, Math.ceil(maxLineW(lines, F.proc)) + 34), h: lines.length * 18 + 26 };
+}
+
+function rectCollide(pad) {
+  let nodes = [];
+  function force() {
+    const n = nodes.length;
+    for (let i = 0; i < n; i++) {
+      const a = nodes[i];
+      for (let j = i + 1; j < n; j++) {
+        const b = nodes[j];
+        const dx = (b.x + b.vx) - (a.x + a.vx), dy = (b.y + b.vy) - (a.y + a.vy);
+        const ox = (a.w + b.w) / 2 + pad - Math.abs(dx);
+        if (ox <= 0) continue;
+        const oy = (a.h + b.h) / 2 + pad - Math.abs(dy);
+        if (oy <= 0) continue;
+        const aFixed = a.fx != null, bFixed = b.fx != null;
+        const wa = aFixed ? 0 : bFixed ? 1 : 0.5, wb = bFixed ? 0 : aFixed ? 1 : 0.5;
+        if (ox < oy) {               // push apart along the axis of least overlap
+          const s = (dx < 0 ? -1 : dx > 0 ? 1 : (jitter(a.id) < 0 ? -1 : 1)) * ox * 0.6;
+          a.vx -= s * wa; b.vx += s * wb;
+        } else {
+          const s = (dy < 0 ? -1 : dy > 0 ? 1 : (jitter(b.id) < 0 ? -1 : 1)) * oy * 0.6;
+          a.vy -= s * wa; b.vy += s * wb;
+        }
+      }
+    }
+  }
+  force.initialize = ns => { nodes = ns; };
+  return force;
+}
+/** Pull each role gently towards same-department roles it shares a process with. */
+function deptCluster(strength) {
+  let nodes = [];
+  function force(alpha) {
+    for (const n of nodes) {
+      if (!n.peers || !n.peers.length || n.fx != null) continue;
+      let cx = 0, cy = 0;
+      for (const p of n.peers) { cx += p.x; cy += p.y; }
+      cx /= n.peers.length; cy /= n.peers.length;
+      n.vx += (cx - n.x) * strength * alpha;
+      n.vy += (cy - n.y) * strength * alpha;
+    }
+  }
+  force.initialize = ns => { nodes = ns; };
+  return force;
+}
+
+const sim = d3.forceSimulation()
+  .force('link', d3.forceLink().id(d => d.id).distance(150).strength(0.55))
+  .force('charge', d3.forceManyBody().strength(d => (d.type === 'process' ? -1500 : -650)).distanceMax(900))
+  .force('collide', rectCollide(16))
+  .force('dept', deptCluster(0.18))
+  .force('x', d3.forceX(0).strength(0.035))
+  .force('y', d3.forceY(0).strength(0.04))
+  .alphaDecay(0.028)
+  .velocityDecay(0.42)
+  .stop();
+sim.on('tick', () => { if (S.view === 'graph' && !morphing) positionGraph(); });
+
+let spawnAt = null; // world position for the next created node
+
+function syncSim() {
+  const d = S.data;
+  const nodes = [];
+  const present = new Set();
+  const place = (n, item, type, i) => {
+    if (spawnAt) { n.x = spawnAt.x; n.y = spawnAt.y; return; }
+    if (type === 'role') {
+      // Start on a ring around its first process, department-mates side by side.
+      const first = idx.roleProcs.get(item.id)?.[0];
+      const pn = first && simNodes.get(first.process.id);
+      if (pn && Number.isFinite(pn.x)) {
+        const ring = rolesSorted(first.process.roles.map(l => l.role)).map(r => r.id);
+        const a = (ring.indexOf(item.id) / ring.length) * Math.PI * 2 + hashStr(first.process.id) % 7;
+        n.x = pn.x + Math.cos(a) * 190; n.y = pn.y + Math.sin(a) * 150;
+        return;
+      }
+    }
+    const a = i * 2.39996, r = (type === 'process' ? 140 : 260) * Math.sqrt(i + 1);
+    n.x = Math.cos(a) * r; n.y = Math.sin(a) * r;
+  };
+  const add = (item, type, i) => {
+    let n = simNodes.get(item.id);
+    if (!n) { n = { id: item.id, type, vx: 0, vy: 0 }; simNodes.set(item.id, n); place(n, item, type, i); }
+    Object.assign(n, nodeGeom(item, type));
+    n.dept = type === 'role' ? (deptOf(item)?.id || null) : null;
+    const pin = d.layout[item.id];
+    if (pin) { n.fx = pin.x; n.fy = pin.y; n.x = pin.x; n.y = pin.y; } else { n.fx = null; n.fy = null; }
+    present.add(item.id);
+    nodes.push(n);
+  };
+  d.processes.forEach((p, i) => add(p, 'process', i));
+  d.roles.forEach((r, i) => add(r, 'role', i));
+  for (const id of [...simNodes.keys()]) if (!present.has(id)) simNodes.delete(id);
+  const links = [];
+  for (const p of d.processes) for (const l of p.roles) links.push({ source: l.role, target: p.id });
+  // Department peers: same department and at least one shared process.
+  for (const r of d.roles) {
+    const n = simNodes.get(r.id);
+    const peers = new Set();
+    if (n.dept) for (const { process } of idx.roleProcs.get(r.id)) for (const l of process.roles) {
+      if (l.role !== r.id && simNodes.get(l.role)?.dept === n.dept) peers.add(simNodes.get(l.role));
+    }
+    n.peers = [...peers];
+  }
+  sim.nodes(nodes);
+  sim.force('link').links(links);
+  const sig = nodes.map(n => n.id).join(',') + '|' + links.map(l => l.source.id + '>' + l.target.id).join(',');
+  const changed = sig !== structureSig;
+  structureSig = sig;
+  spawnAt = null;
+  return changed;
+}
+function settle(ticks = 320) {
+  sim.alpha(1);
+  for (let i = 0; i < ticks; i++) sim.tick();
+  sim.stop();
+}
+
+/* ═══════════════════════════ Cards: graph + tables ═══════════════════════════ */
+function graphCards() {
+  return sim.nodes().map(n => {
+    const item = itemOf(n.id);
+    const c = { key: n.id, id: n.id, type: n.type, kind: 'node', node: n, x: n.x, y: n.y, w: n.w, h: n.h, lines: n.lines, align: 'center', pinned: n.fx != null };
+    if (n.type === 'role') { c.fill = roleColour(item); c.font = F.role; c.lh = 16; }
+    else { c.font = F.proc; c.lh = 18; c.badges = { meeting: item.meetings.length, document: item.documents.length }; c.pad = -3; }
+    return c;
+  });
+}
+
+const CW = 196, CGAP = 26, RGAP = 7;
+function tableLayout(view) {
+  const cards = [], headers = [];
+  const used = new Set();
+  const keyFor = (col, id) => { if (!used.has(id)) { used.add(id); return id; } return col + ':' + id; };
+  const d = S.data;
+  let cols = [];
+  let top = 0;
+  if (view === 'process') cols = d.processes.map(p => ({ type: 'process', item: p }));
+  if (view === 'meeting') cols = d.meetings.map(m => ({ type: 'meeting', item: m }));
+  if (view === 'role') {
+    const groups = deptOrder().map(dep => ({ dep, roles: [...idx.deptRoles.get(dep.id)].sort(byName) })).filter(g => g.roles.length);
+    let i = 0;
+    for (const g of groups) {
+      const x0 = i * (CW + CGAP), x1 = (i + g.roles.length - 1) * (CW + CGAP) + CW;
+      headers.push({ key: 'dep:' + g.dep.id, x: x0, y: 0, w: x1 - x0, h: 30, fill: g.dep.colour, label: g.dep.id === '__none' ? 'Unassigned' : (g.dep.name || 'Untitled department') });
+      for (const r of g.roles) cols.push({ type: 'role', item: r }); i += g.roles.length;
+    }
+    top = 44;
+  }
+  if (!cols.length) {
+    const what = { process: 'processes', role: 'roles', meeting: 'meetings' }[view];
+    headers.push({ key: 'note', note: true, x: 0, y: 0, label: `No ${what} yet` + (S.edit && view !== 'meeting' ? ' — right-click in the graph to add one' : '') });
+    return { cards, headers };
+  }
+  cols.forEach((col, ci) => {
+    const cx = ci * (CW + CGAP) + CW / 2;
+    let y = top;
+    const colKey = col.item.id;
+    const push = (c) => { c.x = cx; c.y = y + c.h / 2; c.col = ci; c.colId = colKey; c.key = keyFor(colKey, c.id); cards.push(c); y += c.h + RGAP; };
+    push(headerCard(col.type, col.item));
+    y += 8;
+    const gap = () => { y += 6; };
+    if (col.type === 'process') {
+      const p = col.item;
+      for (const r of rolesSorted(p.roles.map(l => l.role))) {
+        const l = p.roles.find(x => x.role === r.id);
+        push(rowCard('role', r, l.raci.length ? [{ t: l.raci.join('·'), title: l.raci.map(k => RACI_NAME[k]).join(', ') }] : []));
+      }
+      if (p.meetings.length) gap();
+      for (const m of p.meetings) push(rowCard('meeting', itemOf(m), []));
+      if (p.documents.length) gap();
+      for (const x of p.documents) push(rowCard('document', itemOf(x), []));
+    }
+    if (col.type === 'role') {
+      const r = col.item;
+      for (const { process, link } of [...idx.roleProcs.get(r.id)].sort((a, b) => byName(a.process, b.process)))
+        push(rowCard('process', process, link.raci.length ? [{ t: link.raci.join('·'), title: link.raci.map(k => RACI_NAME[k]).join(', ') }] : []));
+      const ms = idx.roleMeetings.get(r.id);
+      if (ms.length) gap();
+      for (const { meeting, link } of ms) push(rowCard('meeting', meeting, meetingChips(link)));
+      const ds = idx.roleDocs.get(r.id);
+      if (ds.length) gap();
+      for (const x of ds) push(rowCard('document', x.document, [x.own ? { t: 'OWN', title: 'Owner' } : { t: 'REVIEW', title: 'Reviewer', outline: true }]));
+    }
+    if (col.type === 'meeting') {
+      const m = col.item;
+      for (const r of rolesSorted(m.roles.map(l => l.role))) push(rowCard('role', r, meetingChips(m.roles.find(l => l.role === r.id))));
+    }
+  });
+  return { cards, headers };
+}
+function meetingChips(link) {
+  const out = [];
+  if (link.chair) out.push({ t: 'CHAIR', title: 'Chair' });
+  if (link.mandatory) out.push({ t: 'MAND', title: 'Mandatory', outline: true });
+  return out;
+}
+function headerCard(type, item) {
+  const name = displayName(item, type);
+  if (type === 'process') {
+    const lines = wrap(name, CW - 30, F.procHead, 3);
+    return { id: item.id, type, kind: 'header', w: CW, h: lines.length * 19 + 26, lines, font: F.procHead, lh: 19, align: 'center', pad: -3 };
+  }
+  if (type === 'role') {
+    const lines = wrap(name, CW - 26, F.roleHead, 2);
+    return { id: item.id, type, kind: 'header', w: CW, h: lines.length * 17 + 20, lines, font: F.roleHead, lh: 17, align: 'center', fill: roleColour(item) };
+  }
+  const lines = wrap(name, CW - 30, F.meetHead, 3);
+  return { id: item.id, type, kind: 'header', w: CW, h: lines.length * 18 + 22 + (item.cadence ? 16 : 0), lines, font: F.meetHead, lh: 18, align: 'center', sub: item.cadence ? CADENCE_LABEL[item.cadence] : null };
+}
+function rowCard(type, item, chips) {
+  const w = CW - 12;
+  const hasIcon = type !== 'role';
+  const padL = hasIcon ? 32 : 12;
+  const chipsW = chips.reduce((s, c) => s + chipW(c) + 4, 0);
+  const font = type === 'role' ? F.roleRow : F.row;
+  const lines = wrap(displayName(item, type), w - padL - 10 - chipsW, font, 2);
+  return {
+    id: item.id, type, kind: 'row', w, h: lines.length * 15 + 17, lines, font, lh: 15, align: 'left', padL, chips,
+    icon: hasIcon ? TYPES[type].icon : null, fill: type === 'role' ? roleColour(item) : null,
+  };
+}
+
+/* ═══════════════════════════ Cards: drawing ═══════════════════════════ */
+function sigOf(c) { return JSON.stringify([c.type, c.kind, c.w, c.h, c.lines, c.fill, c.icon, c.chips, c.sub, c.badges, c.pinned, c.align]); }
+function setBox(sel, w, h, pad, r) {
+  return sel.attr('x', -w / 2 - pad).attr('y', -h / 2 - pad).attr('width', w + pad * 2).attr('height', h + pad * 2).attr('rx', r + pad);
+}
+function cornerRadius(c) { return c.type === 'role' ? 9 : c.type === 'process' ? 3 : 6; }
+
+function drawInner(g, c, t) {
+  const el = g.node();
+  const sig = sigOf(c);
+  if (el.__sig === sig) return;
+  const old = el.__dims;
+  el.__sig = sig;
+  el.__dims = { w: c.w, h: c.h };
+  g.selectAll('*').remove();
+  const r = cornerRadius(c);
+  const body = g.append('g').attr('class', 'body');
+  const ring = body.append('rect').attr('class', 'ring');
+  const shape = body.append('rect').attr('class', 'shape');
+  if (c.type === 'role') shape.attr('fill', c.fill || 'url(#hatch)');
+  const grow = t && old && (old.w !== c.w || old.h !== c.h);
+  if (grow) {
+    setBox(shape, old.w, old.h, 0, r); setBox(ring, old.w, old.h, 4, r);
+    shape.transition(t).call(s => setBox(s, c.w, c.h, 0, r));
+    ring.transition(t).call(s => setBox(s, c.w, c.h, 4, r));
+  } else { setBox(shape, c.w, c.h, 0, r); setBox(ring, c.w, c.h, 4, r); }
+
+  const content = body.append('g').attr('class', 'content');
+  if (grow) content.attr('opacity', 0).transition(t).attr('opacity', 1);
+  const subH = c.sub ? 16 : 0;
+  const n = c.lines.length;
+  const y0 = -((n * c.lh + subH) / 2) + c.lh * 0.74 + (c.pad || 0) * 0;
+  const text = content.append('text').attr('class', 'label').style('font', c.font).attr('text-anchor', c.align === 'center' ? 'middle' : 'start');
+  const tx = c.align === 'center' ? 0 : -c.w / 2 + c.padL;
+  c.lines.forEach((line, i) => text.append('tspan').attr('x', tx).attr('y', y0 + i * c.lh).text(line));
+  if (c.sub) content.append('text').attr('class', 'sub').attr('text-anchor', 'middle').attr('y', y0 + n * c.lh + 1).text(c.sub.toUpperCase());
+  if (c.icon) content.append('use').attr('href', '#' + c.icon).attr('class', 'kicon')
+    .attr('x', -c.w / 2 + 10).attr('y', -8).attr('width', 16).attr('height', 16);
+  if (c.chips && c.chips.length) {
+    let x = c.w / 2 - 8;
+    for (const chip of [...c.chips].reverse()) {
+      const w = chipW(chip);
+      x -= w;
+      const cg = content.append('g').attr('class', 'chip' + (chip.outline ? ' outline' : '')).attr('transform', `translate(${x},-8)`);
+      cg.append('rect').attr('width', w).attr('height', 16).attr('rx', 8);
+      cg.append('text').attr('x', w / 2).attr('y', 11.5).attr('text-anchor', 'middle').text(chip.t);
+      if (chip.title) cg.append('title').text(chip.title);
+      x -= 4;
+    }
+  }
+  if (c.badges) {
+    const list = [];
+    if (c.badges.meeting) list.push(['i-meeting', `${c.badges.meeting} meeting${c.badges.meeting > 1 ? 's' : ''}`]);
+    if (c.badges.document) list.push(['i-docs', `${c.badges.document} document${c.badges.document > 1 ? 's' : ''}`]);
+    list.forEach(([ic, label], i) => {
+      const bg = content.append('g').attr('class', 'badge').attr('transform', `translate(${-c.w / 2 + 14 + i * 22},${c.h / 2})`);
+      bg.append('circle').attr('r', 9.5);
+      bg.append('use').attr('href', '#' + ic).attr('class', 'kicon').attr('x', -6).attr('y', -6).attr('width', 12).attr('height', 12);
+      bg.append('title').text(label);
+    });
+  }
+  if (c.pinned) content.append('circle').attr('class', 'pin').attr('cx', c.w / 2 - 7).attr('cy', -c.h / 2 + 7).attr('r', 2.6).append('title').text('Pinned — Reset view to release');
+}
+
+/** Render the current view. With morph, cards glide from their previous positions. */
+function renderStage({ morph = false } = {}) {
+  const view = S.view;
+  const layout = view === 'graph' ? { cards: graphCards(), headers: [] } : tableLayout(view);
+  const cards = layout.cards, headers = layout.headers;
+  const prev = lastPos;
+  const next = new Map();
+  for (const c of cards) if (!next.has(c.id)) next.set(c.id, c);
+  currentCards = cards;
+  currentHeaders = headers;
+
+  const related = (id, map) => {
+    if (map.has(id)) return map.get(id);
+    const t = typeOf(id);
+    if (t === 'meeting' || t === 'document') for (const p of idx.procsOf.get(id) || []) if (map.has(p.id)) return map.get(p.id);
+    return null;
+  };
+  const T = morph ? d3.transition('morph').duration(dur(540)).ease(d3.easeCubicInOut) : null;
+  const delay = c => (morph && view !== 'graph' ? dur(Math.min((c.col || 0) * 24, 240)) : 0);
+  const tf = p => `translate(${p.x},${p.y})`;
+
+  gCards.selectAll('g.card').interrupt('morph');
+  const sel = gCards.selectAll('g.card').data(cards, c => c.key);
+
+  const entered = sel.enter().append('g')
+    .attr('data-id', c => c.id)
+    .on('click', onCardClick)
+    .on('mouseenter', (e, c) => { S.hover = c.id; applyHighlight(); })
+    .on('mouseleave', () => { S.hover = null; applyHighlight(); });
+
+  const all = entered.merge(sel)
+    .attr('class', c => `card t-${c.type} k-${c.kind}`)
+    .attr('data-kind', c => c.kind)
+    .attr('data-type', c => c.type)
+    .attr('data-key', c => c.key)
+    .attr('data-col', c => c.colId || null);
+
+  all.each(function (c) { drawInner(d3.select(this), c, morph && T ? T : null); });
+
+  if (morph && T) {
+    morphing = true;
+    entered.each(function (c) {
+      const from = related(c.id, prev);
+      d3.select(this).attr('transform', tf(from || { x: c.x, y: c.y + 10 })).style('opacity', 0);
+    });
+    all.transition(T).delay(delay).attr('transform', tf).style('opacity', 1);
+    sel.exit().each(function (c) {
+      const to = related(c.id, next);
+      const s = d3.select(this).transition(T).style('opacity', 0);
+      if (to) s.attr('transform', tf(to));
+      s.remove();
+    });
+    T.end().catch(() => {}).then(() => {
+      morphing = false;
+      if (S.view === 'graph') positionGraph();
+      // Re-sync hover with whatever is under the pointer now that cards have settled.
+      const under = lastPointer.x >= 0 ? document.elementFromPoint(lastPointer.x, lastPointer.y)?.closest?.('#stage g.card') : null;
+      S.hover = under ? d3.select(under).datum().id : null;
+      applyHighlight();
+    });
+  } else {
+    all.attr('transform', tf).style('opacity', 1);
+    sel.exit().remove();
+  }
+  if (view === 'graph') all.call(dragBehaviour); else all.on('.drag', null);
+
+  // Edges (graph only)
+  // Interrupt any fade-out still running, or a late .remove() would delete re-used elements.
+  gEdges.selectAll('line').interrupt('morph');
+  const links = view === 'graph' ? sim.force('link').links() : [];
+  const es = gEdges.selectAll('line').data(links, l => l.source.id + '>' + l.target.id);
+  const eEnter = es.enter().append('line').attr('data-role', l => l.source.id).attr('data-process', l => l.target.id);
+  const eAll = eEnter.merge(es);
+  if (morph && T) {
+    eEnter.style('opacity', 0);
+    eAll.transition(T).delay(dur(320)).style('opacity', 1);
+    es.exit().transition(T).duration(dur(160)).style('opacity', 0).remove();
+  } else { eAll.style('opacity', 1); es.exit().remove(); }
+  eAll.each(function (l) { placeEdge(this, l); });
+
+  // Department bands / empty-table note (tables only)
+  gHeaders.selectAll('g.hdr').interrupt('morph');
+  const hs = gHeaders.selectAll('g.hdr').data(headers, h => h.key);
+  const hEnter = hs.enter().append('g').attr('class', 'hdr');
+  hEnter.merge(hs).each(function (hd) {
+    const g = d3.select(this);
+    g.selectAll('*').remove();
+    if (hd.note) { g.append('text').attr('class', 'note').attr('x', 0).attr('y', 0).text(hd.label); return; }
+    g.append('rect').attr('x', hd.x).attr('y', hd.y).attr('width', hd.w).attr('height', hd.h).attr('fill', hd.fill || 'url(#hatch)');
+    g.append('text').attr('x', hd.x + hd.w / 2).attr('y', hd.y + 20).attr('text-anchor', 'middle').text(hd.label);
+  });
+  if (morph && T) {
+    hEnter.style('opacity', 0);
+    hEnter.merge(hs).transition(T).delay(dur(200)).duration(dur(300)).style('opacity', 1);
+    hs.exit().transition(T).duration(dur(160)).style('opacity', 0).remove();
+  } else { hEnter.merge(hs).style('opacity', 1); hs.exit().remove(); }
+
+  gOrbits.classed('off', view !== 'graph');
+  lastPos = new Map([...next].map(([id, c]) => [id, { x: c.x, y: c.y }]));
+  applySelection();
+  applyHighlight();
+}
+
+function clipToBox(cx, cy, w, h, dx, dy, margin = 2) {
+  const hw = w / 2 + margin, hh = h / 2 + margin;
+  const tx = dx ? hw / Math.abs(dx) : Infinity, ty = dy ? hh / Math.abs(dy) : Infinity;
+  const t = Math.min(tx, ty);
+  return [cx + dx * t, cy + dy * t];
+}
+function placeEdge(el, l) {
+  const a = l.source, b = l.target;
+  const dx = b.x - a.x, dy = b.y - a.y;
+  if (!dx && !dy) return;
+  const [x1, y1] = clipToBox(a.x, a.y, a.w, a.h, dx, dy);
+  const [x2, y2] = clipToBox(b.x, b.y, b.w, b.h, -dx, -dy);
+  el.setAttribute('x1', x1); el.setAttribute('y1', y1); el.setAttribute('x2', x2); el.setAttribute('y2', y2);
+}
+function positionGraph() {
+  gCards.selectAll('g.card').each(function (c) {
+    if (!c.node) return;
+    c.x = c.node.x; c.y = c.node.y;
+    this.setAttribute('transform', `translate(${c.x},${c.y})`);
+  });
+  gEdges.selectAll('line').each(function (l) { placeEdge(this, l); });
+  for (const c of currentCards) lastPos.set(c.id, { x: c.x, y: c.y });
+}
+
+function applySelection() {
+  gCards.selectAll('g.card').classed('selected', c => c.id === S.sel);
+}
+
+/* ═══════════════════════════ Highlighting ═══════════════════════════ */
+function searchMatches(q) {
+  q = q.trim().toLowerCase();
+  const m = new Set();
+  if (!q) return m;
+  const hit = x => x.name.toLowerCase().includes(q) || x.description.toLowerCase().includes(q);
+  for (const r of S.data.roles) if (hit(r) || (deptOf(r)?.name || '').toLowerCase().includes(q)) m.add(r.id);
+  for (const p of S.data.processes) if (hit(p)) m.add(p.id);
+  for (const x of [...S.data.meetings, ...S.data.documents]) if (hit(x)) {
+    m.add(x.id);
+    for (const p of idx.procsOf.get(x.id) || []) m.add(p.id);
+  }
+  return m;
+}
+function neighbours(id) {
+  const t = typeOf(id);
+  const s = new Set([id]);
+  if (t === 'role') for (const { process } of idx.roleProcs.get(id)) s.add(process.id);
+  if (t === 'process') for (const l of itemOf(id).roles) s.add(l.role);
+  return s;
+}
+function involvedIn(id) {
+  const t = typeOf(id), x = itemOf(id);
+  const s = new Set([id]);
+  for (const p of idx.procsOf.get(id) || []) s.add(p.id);
+  if (t === 'meeting') for (const l of x.roles) s.add(l.role);
+  if (t === 'document') for (const r of [...x.owners, ...x.reviewers]) s.add(r);
+  return s;
+}
+function applyHighlight() {
+  if (!idx) return;
+  let lit = null, focus = null;
+  const graph = S.view === 'graph';
+  // A card can be removed while hovered (view switch, delete), so only trust hovers on cards still drawn.
+  if (S.hover && !currentCards.some(c => c.id === S.hover)) S.hover = null;
+  if (S.hover && idx.byId.has(S.hover)) { lit = graph ? neighbours(S.hover) : new Set([S.hover]); focus = S.hover; }
+  else if (S.search.trim()) lit = searchMatches(S.search);
+  else if (S.legendHover) lit = new Set((idx.deptRoles.get(S.legendHover) || []).map(r => r.id));
+  else if (graph && S.sel && ['meeting', 'document'].includes(typeOf(S.sel))) lit = involvedIn(S.sel);
+  gCards.selectAll('g.card').select('.body').classed('dim', c => !!lit && !lit.has(c.id));
+  gEdges.selectAll('line')
+    .classed('lit', l => !!focus && (l.source.id === focus || l.target.id === focus))
+    .classed('dim', l => !!lit && (focus ? !(l.source.id === focus || l.target.id === focus) : !(lit.has(l.source.id) && lit.has(l.target.id))));
+  const box = $('#search .count');
+  if (box) box.textContent = S.search.trim() ? `${lit ? [...lit].filter(id => S.view !== 'graph' || ['role', 'process'].includes(typeOf(id))).length : 0} found` : '';
+}
+
+/* ═══════════════════════════ Pan, zoom, fit ═══════════════════════════ */
+function viewportBox(forTable) {
+  const W = window.innerWidth, H = window.innerHeight;
+  const detailOpen = !$('#detail').classList.contains('collapsed');
+  const left = forTable ? 36 : 28;
+  const right = W - (detailOpen ? 372 + 40 : 28);
+  const top = forTable ? 92 : 28;
+  const bottom = H - 28;
+  return { x: left, y: top, w: Math.max(100, right - left), h: Math.max(100, bottom - top) };
+}
+function contentBounds() {
+  const boxes = currentCards.map(c => ({ x0: c.x - c.w / 2, y0: c.y - c.h / 2, x1: c.x + c.w / 2, y1: c.y + c.h / 2 }));
+  for (const hd of currentHeaders) if (!hd.note) boxes.push({ x0: hd.x, y0: hd.y, x1: hd.x + hd.w, y1: hd.y + hd.h });
+  if (!boxes.length) return null;
+  const b = { x0: d3.min(boxes, v => v.x0), y0: d3.min(boxes, v => v.y0), x1: d3.max(boxes, v => v.x1), y1: d3.max(boxes, v => v.y1) };
+  b.w = b.x1 - b.x0; b.h = b.y1 - b.y0;
+  return b;
+}
+function fit({ animate = true } = {}) {
+  const table = S.view !== 'graph';
+  const vp = viewportBox(table);
+  const b = contentBounds();
+  let k, tx, ty;
+  if (!b) {
+    k = 1;
+    const note = currentHeaders.find(hd => hd.note);
+    tx = vp.x + vp.w / 2; ty = vp.y + vp.h / 2;
+    if (note) { tx = vp.x + vp.w / 2 - textW(note.label, 'italic 24px "Instrument Serif"') / 2; }
+  } else if (!table) {
+    k = clamp(Math.min(vp.w / (b.w + 60), vp.h / (b.h + 60)), 0.15, 1.3);
+    tx = vp.x + vp.w / 2 - k * (b.x0 + b.w / 2);
+    ty = vp.y + vp.h / 2 - k * (b.y0 + b.h / 2);
+  } else {
+    k = clamp(Math.min(vp.w / b.w, vp.h / b.h), 0.8, 1);
+    tx = b.w * k <= vp.w ? vp.x + (vp.w - b.w * k) / 2 - k * b.x0 : vp.x - k * b.x0;
+    ty = vp.y - k * b.y0;
+  }
+  const tr = d3.zoomIdentity.translate(tx, ty).scale(k);
+  if (animate && dur(1)) svg.transition('fit').duration(dur(480)).ease(d3.easeCubicInOut).call(zoom.transform, tr);
+  else svg.interrupt('fit').call(zoom.transform, tr);
+}
+function zoomBy(f) { svg.transition('fit').duration(dur(200)).call(zoom.scaleBy, f); }
+
+/* ═══════════════════════════ Refresh cycle ═══════════════════════════ */
+function refresh({ morph = false } = {}) {
+  idx = buildIndex(S.data);
+  if (S.sel && !idx.byId.has(S.sel)) S.sel = null;
+  const before = sizeSig();
+  const changed = syncSim();
+  const resized = before !== sizeSig();
+  if (S.view === 'graph') { if (changed) sim.alpha(0.35).restart(); else if (resized) sim.alpha(0.08).restart(); }
+  else if (changed || resized) simStale = true;
+  renderStage({ morph });
+  renderLegend();
+  renderPanel();
+  renderChrome();
+  renderEmpty();
+}
+const sizeSig = () => sim.nodes().map(n => n.w + 'x' + n.h).join(',');
+
+/* ═══════════════════════════ Selection, views, history ═══════════════════════════ */
+function select(id, { push = true } = {}) {
+  if (id && !idx.byId.has(id)) id = null;
+  if (id === S.sel) return;
+  S.sel = id;
+  if (push && id) pushHist();
+  applySelection();
+  applyHighlight();
+  renderPanel();
+  renderChrome();
+}
+function setView(v, { push = true } = {}) {
+  if (v === S.view || !VIEWS.some(x => x.id === v)) return;
+  if (S.view === 'graph') sim.stop();
+  S.view = v;
+  S.hover = null;
+  if (v === 'graph' && simStale) { settle(160); simStale = false; }
+  renderStage({ morph: true });
+  fit();
+  if (push) pushHist();
+  renderChrome();
+  renderEmpty();
+}
+function pushHist() {
+  const top = S.hist[S.histIdx];
+  if (top && top.view === S.view && top.sel === S.sel) return;
+  S.hist = S.hist.slice(0, S.histIdx + 1);
+  S.hist.push({ view: S.view, sel: S.sel });
+  if (S.hist.length > 200) S.hist.shift();
+  S.histIdx = S.hist.length - 1;
+}
+function goHist(delta) {
+  const i = S.histIdx + delta;
+  if (i < 0 || i >= S.hist.length) return;
+  S.histIdx = i;
+  const e = S.hist[i];
+  if (e.view !== S.view) setView(e.view, { push: false });
+  select(e.sel && idx.byId.has(e.sel) ? e.sel : null, { push: false });
+  renderChrome();
+}
+function toggleEdit(on = !S.edit) {
+  if (on === S.edit) return;
+  if (!on && document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); // commit pending field edits first
+  S.edit = on;
+  document.body.classList.toggle('editing', on);
+  hideMenu();
+  renderPanel(); renderLegend(); renderChrome(); renderEmpty();
+  if (S.view !== 'graph') renderStage();
+}
+
+/* ═══════════════════════════ Card interactions ═══════════════════════════ */
+function onCardClick(e, c) {
+  e.stopPropagation();
+  select(c.id);
+}
+svg.on('mouseleave', () => { if (S.hover) { S.hover = null; applyHighlight(); } });
+svg.on('click', (e) => {
+  if (e.target.closest && e.target.closest('g.card')) return;
+  select(null, { push: false });
+});
+
+let dragMoved = false;
+const dragBehaviour = d3.drag()
+  .clickDistance(4)
+  .subject((e, c) => ({ x: c.node.x, y: c.node.y }))
+  .on('start', (e, c) => {
+    dragMoved = false;
+    c.node.__wasPinned = c.node.fx != null;
+    c.node.fx = c.node.x; c.node.fy = c.node.y;
+    sim.alphaTarget(0.12).restart();
+  })
+  .on('drag', (e, c) => {
+    dragMoved = true;
+    c.node.fx = e.x; c.node.fy = e.y;
+  })
+  .on('end', (e, c) => {
+    sim.alphaTarget(0);
+    const n = c.node;
+    if (dragMoved) {
+      S.data.layout[n.id] = { x: Math.round(n.fx), y: Math.round(n.fy) };
+      setDirty(true);
+      renderStage();          // shows the pin mark
+    } else if (!n.__wasPinned) { n.fx = null; n.fy = null; }
+  });
+
+function unpin(id) {
+  delete S.data.layout[id];
+  const n = simNodes.get(id);
+  if (n) { n.fx = null; n.fy = null; }
+  setDirty(true);
+  sim.alpha(0.3).restart();
+  renderStage();
+}
+function resetView() {
+  const hadPins = Object.keys(S.data.layout).length > 0;
+  S.data.layout = {};
+  for (const n of simNodes.values()) { n.fx = null; n.fy = null; }
+  if (hadPins) setDirty(true);
+  if (S.view === 'graph') {
+    settle(260);
+    renderStage({ morph: true });
+  } else simStale = true;
+  fit();
+  toast(hadPins ? 'View reset. Pinned positions released.' : 'View reset.');
+}
+
+/* ── Right button: context menus and connect-by-dragging ── */
+let rdrag = null;
+const worldPoint = (e) => d3.zoomTransform(svg.node()).invert(d3.pointer(e, svg.node()));
+const cardAt = (e) => {
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const g = el && el.closest && el.closest('#stage g.card');
+  return g ? d3.select(g).datum() : null;
+};
+const canLink = (a, b) => a && b && a.id !== b.id && new Set([a.type, b.type]).size === 2 && [a.type, b.type].every(t => t === 'role' || t === 'process');
+const alreadyLinked = (a, b) => {
+  const [r, p] = a.type === 'role' ? [a.id, b.id] : [b.id, a.id];
+  return itemOf(p).roles.some(l => l.role === r);
+};
+svg.node().addEventListener('contextmenu', e => e.preventDefault());
+svg.node().addEventListener('pointerdown', (e) => {
+  if (e.button !== 2) return;
+  hideMenu();
+  const g = e.target.closest && e.target.closest('g.card');
+  rdrag = { x0: e.clientX, y0: e.clientY, c: g ? d3.select(g).datum() : null, moved: false, target: null };
+  window.addEventListener('pointermove', onRightMove);
+  window.addEventListener('pointerup', onRightUp);
+});
+function onRightMove(e) {
+  if (!rdrag) return;
+  if (!rdrag.moved && Math.hypot(e.clientX - rdrag.x0, e.clientY - rdrag.y0) > 5) rdrag.moved = true;
+  if (!rdrag.moved || !rdrag.c || !S.edit || S.view !== 'graph' || !rdrag.c.node) return;
+  const [x, y] = worldPoint(e);
+  const t = cardAt(e);
+  const ok = t && t.id !== rdrag.c.id ? canLink(rdrag.c, t) && !alreadyLinked(rdrag.c, t) : null;
+  rubber.attr('hidden', null).attr('x1', rdrag.c.node.x).attr('y1', rdrag.c.node.y).attr('x2', x).attr('y2', y).classed('invalid', ok === false);
+  gCards.selectAll('g.card').classed('link-target', c => ok === true && c.key === t.key).classed('link-invalid', c => ok === false && c.key === t.key);
+  rdrag.target = t;
+}
+function onRightUp(e) {
+  if (e.button !== 2) return;
+  window.removeEventListener('pointermove', onRightMove);
+  window.removeEventListener('pointerup', onRightUp);
+  const r = rdrag;
+  rdrag = null;
+  rubber.attr('hidden', true);
+  gCards.selectAll('g.card').classed('link-target', false).classed('link-invalid', false);
+  if (!r) return;
+  if (r.moved) {
+    if (!r.c || !S.edit || S.view !== 'graph') return;
+    const t = cardAt(e);
+    if (!t || t.id === r.c.id) return;
+    if (!canLink(r.c, t)) { toast(r.c.type === t.type ? `A ${TYPES[t.type].label.toLowerCase()} can’t connect to another ${TYPES[t.type].label.toLowerCase()}. Connect roles to processes.` : 'Only roles and processes can be connected here.'); return; }
+    if (alreadyLinked(r.c, t)) { toast('Those two are already connected.'); return; }
+    const [roleId, procId] = r.c.type === 'role' ? [r.c.id, t.id] : [t.id, r.c.id];
+    commit('connect', d => linkRoleProcess(d, roleId, procId));
+    return;
+  }
+  if (r.c) showNodeMenu(r.c, e);
+  else if (S.edit && S.view === 'graph') showCanvasMenu(e);
+}
+function showCanvasMenu(e) {
+  const [x, y] = worldPoint(e);
+  showMenu([
+    { label: 'New role…', icon: 'i-person', run: () => createAt('role', x, y) },
+    { label: 'New process…', icon: 'i-cog', run: () => createAt('process', x, y) },
+  ], e.clientX, e.clientY);
+}
+function showNodeMenu(c, e) {
+  const items = [];
+  const item = itemOf(c.id);
+  if (S.view === 'graph' && S.data.layout[c.id]) items.push({ label: 'Release position', icon: 'i-unpin', run: () => unpin(c.id) });
+  if (S.edit) items.push({ label: `Delete ${TYPES[c.type].label.toLowerCase()} “${displayName(item, c.type)}”`, icon: 'i-trash', danger: true, run: () => deleteEntity(c.id) });
+  if (items.length) showMenu(items, e.clientX, e.clientY);
+}
+function createAt(type, x, y) {
+  let made = null;
+  spawnAt = { x, y };
+  commit(`add ${type}`, d => {
+    made = createItem(d, type, { name: type === 'role' ? 'New role' : 'New process' });
+    d.layout[made.id] = { x: Math.round(x), y: Math.round(y) };
+  });
+  if (made) { select(made.id); setCollapsed('detail', false); focusName(); }
+}
+function deleteEntity(id) {
+  const t = typeOf(id);
+  if (!t) return;
+  const name = displayName(itemOf(id), t);
+  if (commit(`delete ${TYPES[t].label.toLowerCase()}`, d => deleteItem(d, id))) toast(`Deleted “${name}”. Undo with Ctrl+Z.`);
+}
+function focusName() {
+  requestAnimationFrame(() => { const el = $('#detail input.name'); if (el) { el.focus(); el.select(); } });
+}
+
+/* ═══════════════════════════ Menus ═══════════════════════════ */
+const menuEl = $('#menu');
+let menuReturnFocus = null;
+function showMenu(items, x, y, { content = null, returnFocus = null } = {}) {
+  menuReturnFocus = returnFocus;
+  menuEl.replaceChildren();
+  if (content) menuEl.append(content);
+  else for (const it of items) {
+    if (it === '-') { menuEl.append(h('div', { class: 'menu-sep' })); continue; }
+    menuEl.append(h('button', {
+      role: it.checked != null ? 'menuitemradio' : 'menuitem', 'aria-checked': it.checked != null ? String(!!it.checked) : null,
+      class: it.danger ? 'danger' : null,
+      onclick: () => { hideMenu(); it.run(); },
+    }, it.icon ? icon(it.icon) : null, h('span', null, it.label), it.kbd ? h('span', { class: 'kbd' }, it.kbd) : null));
+  }
+  menuEl.hidden = false;
+  const r = menuEl.getBoundingClientRect();
+  menuEl.style.left = clamp(x, 8, window.innerWidth - r.width - 8) + 'px';
+  menuEl.style.top = clamp(y, 8, window.innerHeight - r.height - 8) + 'px';
+  const first = menuEl.querySelector('button');
+  if (first) first.focus({ preventScroll: true });
+}
+function hideMenu() {
+  if (menuEl.hidden) return;
+  menuEl.hidden = true;
+  if (menuReturnFocus) { menuReturnFocus.focus({ preventScroll: true }); menuReturnFocus = null; }
+}
+menuEl.addEventListener('keydown', (e) => {
+  const btns = $$('button', menuEl);
+  const i = btns.indexOf(document.activeElement);
+  if (e.key === 'ArrowDown') { e.preventDefault(); btns[(i + 1) % btns.length]?.focus(); }
+  if (e.key === 'ArrowUp') { e.preventDefault(); btns[(i - 1 + btns.length) % btns.length]?.focus(); }
+  if (e.key === 'Tab') hideMenu();
+});
+document.addEventListener('pointerdown', (e) => { if (!menuEl.hidden && !menuEl.contains(e.target)) hideMenu(); }, true);
+svg.on('wheel.menu', () => hideMenu());
+
+function showViewMenu() {
+  const b = $('#btn-view').getBoundingClientRect();
+  showMenu(VIEWS.map(v => ({ label: v.label, icon: v.icon, kbd: v.key, checked: S.view === v.id, run: () => setView(v.id) })), b.left, b.bottom + 8, { returnFocus: $('#btn-view') });
+}
+
+/* ═══════════════════════════ Search + edge reveals ═══════════════════════════ */
+const searchEl = $('#search'), searchInput = $('#search-input');
+let searchPinned = false;
+function setSearch(q) {
+  S.search = q;
+  if (searchInput.value !== q) searchInput.value = q;
+  $('#search .clear').hidden = !q;
+  applyHighlight();
+  updateReveal();
+}
+function openSearch() { searchPinned = true; updateReveal(); searchInput.focus(); searchInput.select(); }
+let lastPointer = { x: -1, y: -1 };
+function updateReveal() {
+  const { x, y } = lastPointer;
+  const W = window.innerWidth, H = window.innerHeight;
+  const showing = searchEl.classList.contains('show');
+  const band = x > W * 0.22 && x < W * 0.78;
+  const near = band && y >= 0 && y < (showing ? 120 : 60);
+  searchEl.classList.toggle('show', near || searchPinned || document.activeElement === searchInput || !!S.search);
+  const zc = $('#zoomctl');
+  const zShowing = zc.classList.contains('show');
+  zc.classList.toggle('show', y > H - (zShowing ? 130 : 100) && Math.abs(x - W / 2) < Math.max(170, W * 0.17));
+}
+window.addEventListener('pointermove', (e) => { lastPointer = { x: e.clientX, y: e.clientY }; updateReveal(); }, { passive: true });
+document.addEventListener('pointerleave', () => { lastPointer = { x: -1, y: -1 }; updateReveal(); });
+searchInput.addEventListener('input', () => setSearch(searchInput.value));
+searchInput.addEventListener('focus', () => { searchPinned = true; updateReveal(); });
+searchInput.addEventListener('blur', () => { searchPinned = false; updateReveal(); });
+searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setSearch(''); searchInput.blur(); }
+  if (e.key === 'Enter') {
+    const m = [...searchMatches(S.search)];
+    const pick = m.find(id => ['role', 'process'].includes(typeOf(id))) || m[0];
+    if (pick) select(pick);
+  }
+});
+$('#search .clear').addEventListener('click', () => { setSearch(''); searchInput.focus(); });
+
+/* ═══════════════════════════ Keyboard ═══════════════════════════ */
+document.addEventListener('keydown', (e) => {
+  const typing = e.target.closest && e.target.closest('input, textarea, select, [contenteditable]');
+  const mod = e.ctrlKey || e.metaKey;
+  const k = e.key.toLowerCase();
+  if (mod && k === 's') { e.preventDefault(); if (typing) typing.blur(); e.shiftKey ? saveAs() : save(); return; }
+  if (mod && k === 'o') { e.preventDefault(); openFile(); return; }
+  if (mod && k === 'f') { e.preventDefault(); openSearch(); return; }
+  if (e.key === 'Escape') {
+    if (!menuEl.hidden) { hideMenu(); return; }
+    if (typing) { typing.blur(); return; }
+    if (S.search) { setSearch(''); return; }
+    select(null, { push: false });
+    return;
+  }
+  if (typing) return;
+  if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && k === 'y') { e.preventDefault(); redo(); return; }
+  if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); goHist(-1); return; }
+  if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); goHist(1); return; }
+  if (mod || e.altKey) return;
+  if (k === 'e') { toggleEdit(); return; }
+  if (k === 'f') { fit(); return; }
+  if (e.key === '/') { e.preventDefault(); openSearch(); return; }
+  const v = VIEWS.find(x => x.key === e.key);
+  if (v) { setView(v.id); return; }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && S.edit && S.sel && !e.target.closest('#menu')) { e.preventDefault(); deleteEntity(S.sel); }
+});
+
+/* ═══════════════════════════ Panels: collapse ═══════════════════════════ */
+const PREFS_KEY = 'orrery.panels';
+let prefs = { toolbar: false, legend: false, detail: false, sub: false };
+try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')); } catch (e) {}
+function savePrefs() { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) {} }
+function setCollapsed(which, v) {
+  prefs[which] = v; savePrefs();
+  if (which === 'sub') {
+    $('#subpanel').classList.toggle('collapsed', !v);   // prefs.sub = open
+    $('#sub-toggle').setAttribute('aria-expanded', String(v));
+    return;
+  }
+  $('#' + which).classList.toggle('collapsed', v);
+  $('#' + which + '-open').hidden = !v;
+  if (which === 'toolbar') $('#subpanel').classList.toggle('collapsed', v || !prefs.sub);
+}
+function applyPrefs() {
+  for (const k of ['toolbar', 'legend', 'detail']) setCollapsed(k, !!prefs[k]);
+  setCollapsed('sub', !!prefs.sub);
+  if (prefs.toolbar) $('#subpanel').classList.add('collapsed');
+}
+$('#toolbar-collapse').addEventListener('click', () => { setCollapsed('toolbar', true); $('#toolbar-open').focus(); });
+$('#toolbar-open').addEventListener('click', () => { setCollapsed('toolbar', false); $('#toolbar-collapse').focus(); });
+$('#legend-collapse').addEventListener('click', () => { setCollapsed('legend', true); $('#legend-open').focus(); });
+$('#legend-open').addEventListener('click', () => { setCollapsed('legend', false); $('#legend-collapse').focus(); });
+$('#detail-collapse').addEventListener('click', () => { setCollapsed('detail', true); $('#detail-open').focus(); });
+$('#detail-open').addEventListener('click', () => { setCollapsed('detail', false); $('#detail-collapse').focus(); });
+$('#sub-toggle').addEventListener('click', () => setCollapsed('sub', !prefs.sub));
+
+/* ═══════════════════════════ Toolbar & chrome ═══════════════════════════ */
+function currentTheme() {
+  return document.documentElement.dataset.theme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+}
+function renderChrome() {
+  if (!S.data) return;
+  $('#btn-back').disabled = S.histIdx <= 0;
+  $('#btn-forward').disabled = S.histIdx >= S.hist.length - 1;
+  const u = S.undo[S.undo.length - 1], r = S.redo[S.redo.length - 1];
+  $('#btn-undo').disabled = !u; $('#btn-undo').title = u ? `Undo ${u.label} (Ctrl+Z)` : 'Nothing to undo';
+  $('#btn-redo').disabled = !r; $('#btn-redo').title = r ? `Redo ${r.label} (Ctrl+Y)` : 'Nothing to redo';
+  $('#btn-edit').setAttribute('aria-pressed', String(S.edit));
+  $('#btn-edit').title = S.edit ? 'Leave edit mode (E)' : 'Edit mode (E)';
+  const save = $('#btn-save');
+  save.querySelector('.dot')?.remove();
+  if (S.dirty) save.append(h('span', { class: 'dot', title: 'Unsaved changes' }));
+  save.title = S.dirty ? 'Save — unsaved changes (Ctrl+S)' : 'Save (Ctrl+S)';
+  const view = VIEWS.find(v => v.id === S.view);
+  $('#btn-view').title = `Change view — now: ${view.label}`;
+  const t = $('#doc-title');
+  if (document.activeElement !== t) t.value = S.data.title;
+  t.disabled = !S.edit;
+  $('#file-name').textContent = S.fileName ? S.fileName + (S.dirty ? ' · unsaved changes' : '') : (S.dirty ? 'Not saved yet' : 'No file open');
+  const dark = currentTheme() === 'dark';
+  $('#btn-theme span').textContent = dark ? 'Light mode' : 'Dark mode';
+  $('#btn-theme use').setAttribute('href', dark ? '#i-sun' : '#i-moon');
+  document.title = `${S.dirty ? '• ' : ''}${S.data.title} — Orrery`;
+}
+function renderEmpty() {
+  const box = $('#empty');
+  const nothing = !S.data.roles.length && !S.data.processes.length;
+  box.hidden = !(nothing && S.view === 'graph');
+  if (box.hidden) return;
+  const c = $('.content', box);
+  c.replaceChildren(S.edit
+    ? h('div', null, h('h1', null, S.data.title), h('p', { class: 'hint' }, 'Right-click anywhere to add your first role or process.'))
+    : h('div', null,
+        h('h1', null, 'Orrery'),
+        h('p', null, 'Open an organisation file to explore its roles, processes, meetings and documents — or start from the example.'),
+        h('div', { class: 'btns' },
+          h('button', { class: 'btn primary', onclick: openFile }, icon('i-open'), 'Open file…'),
+          h('button', { class: 'btn', onclick: loadExample }, icon('i-book'), 'Load example'),
+          h('button', { class: 'btn', onclick: () => toggleEdit(true) }, icon('i-pencil'), 'Start from blank'))));
+}
+$('#btn-open').addEventListener('click', () => openFile());
+$('#btn-save').addEventListener('click', () => save());
+$('#btn-saveas').addEventListener('click', () => saveAs());
+$('#btn-view').addEventListener('click', () => (menuEl.hidden ? showViewMenu() : hideMenu()));
+$('#btn-back').addEventListener('click', () => goHist(-1));
+$('#btn-forward').addEventListener('click', () => goHist(1));
+$('#btn-undo').addEventListener('click', () => undo());
+$('#btn-redo').addEventListener('click', () => redo());
+$('#btn-edit').addEventListener('click', () => toggleEdit());
+$('#btn-reset').addEventListener('click', () => resetView());
+$('#btn-fit').addEventListener('click', () => fit());
+$('#btn-zoom-fit').addEventListener('click', () => fit());
+$('#btn-zoom-in').addEventListener('click', () => zoomBy(1.3));
+$('#btn-zoom-out').addEventListener('click', () => zoomBy(1 / 1.3));
+$('#btn-new').addEventListener('click', () => { if (confirmDiscard()) { loadData(emptyData()); toggleEdit(true); } });
+$('#btn-example').addEventListener('click', () => loadExample());
+$('#btn-theme').addEventListener('click', () => {
+  const next = currentTheme() === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('orrery.theme', next); } catch (e) {}
+  renderChrome();
+});
+$('#doc-title').addEventListener('change', (e) => {
+  const v = e.target.value.trim();
+  if (!v) { e.target.value = S.data.title; return; }
+  commit('rename organisation', d => { if (d.title === v) return false; d.title = v; });
+});
+$('#doc-title').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
+
+/* ═══════════════════════════ Legend ═══════════════════════════ */
+function renderLegend() {
+  const ul = $('#legend ul');
+  const rows = deptOrder();
+  ul.replaceChildren();
+  if (!rows.length) ul.append(h('li', { class: 'empty-note' }, S.edit ? 'No departments yet.' : 'No departments.'));
+  for (const dep of rows) {
+    const none = dep.id === '__none';
+    const count = idx.deptRoles.get(dep.id).length;
+    const li = h('li', {
+      'data-dept': dep.id,
+      onmouseenter: () => { S.legendHover = dep.id; applyHighlight(); },
+      onmouseleave: () => { S.legendHover = null; applyHighlight(); },
+    });
+    const swatchStyle = none ? null : `background:${dep.colour}`;
+    if (S.edit && !none) {
+      li.append(h('button', { class: 'swatch', style: swatchStyle, title: 'Change colour', 'aria-label': `Change colour of ${dep.name || 'department'}`, onclick: (e) => showPalette(dep, e.currentTarget) }));
+      li.append(h('input', {
+        class: 'name', value: dep.name, 'aria-label': 'Department name', placeholder: 'Department name',
+        onchange: (e) => { const v = e.target.value.trim(); if (!v) { e.target.value = dep.name; return; } commit('rename department', d => { d.departments.find(x => x.id === dep.id).name = v; }); },
+        onkeydown: (e) => { if (e.key === 'Enter') e.target.blur(); },
+      }));
+      li.append(h('span', { class: 'count', title: `${count} role${count === 1 ? '' : 's'}` }, String(count)));
+      li.append(h('button', { class: 'rm', title: 'Delete department (its roles become unassigned)', 'aria-label': `Delete department ${dep.name}`,
+        onclick: () => commit('delete department', d => { d.departments = d.departments.filter(x => x.id !== dep.id); for (const r of d.roles) if (r.department === dep.id) r.department = null; }) }, icon('i-x', 'ic sm')));
+    } else {
+      li.append(h('span', { class: 'swatch' + (none ? ' unassigned' : ''), style: swatchStyle }));
+      li.append(h('span', { class: 'name' }, none ? 'Unassigned' : (dep.name || 'Untitled department')));
+      li.append(h('span', { class: 'count', title: `${count} role${count === 1 ? '' : 's'}` }, String(count)));
+    }
+    ul.append(li);
+  }
+  if (S.edit) ul.append(h('li', null, h('button', { class: 'textbtn add', onclick: () => {
+    let made;
+    commit('add department', d => { made = { id: newId('dep'), name: 'New department', colour: nextColour(d.departments.map(x => x.colour)) }; d.departments.push(made); });
+    requestAnimationFrame(() => { const el = $(`#legend li[data-dept="${made.id}"] input`); if (el) { el.focus(); el.select(); } });
+  } }, icon('i-plus'), 'Add department')));
+}
+function showPalette(dep, anchor) {
+  const grid = h('div', { class: 'palette', role: 'radiogroup', 'aria-label': 'Department colour' },
+    PALETTE.map(p => h('button', {
+      style: `background:${p.hex}`, title: p.name, 'aria-label': p.name, role: 'radio', 'aria-checked': String(p.hex === dep.colour),
+      onclick: () => { hideMenu(); commit('recolour department', d => { d.departments.find(x => x.id === dep.id).colour = p.hex; }); },
+    })));
+  const r = anchor.getBoundingClientRect();
+  showMenu(null, r.left, r.top - 110, { content: grid, returnFocus: anchor });
+}
+
+/* ═══════════════════════════ Detail panel ═══════════════════════════ */
+let pendingFinder = null;
+function renderPanel() {
+  const root = $('#detail .inner');
+  const id = S.sel, type = typeOf(id);
+  const prevBody = $('#detail .body');
+  const keepScroll = prevBody && prevBody.dataset.id === id ? prevBody.scrollTop : 0;
+  if (!type) {
+    root.replaceChildren(h('div', { class: 'placeholder' },
+      h('p', { class: 'eyebrow' }, 'Nothing selected'),
+      h('p', null, 'Select a role, process, meeting or document to see its details here.'),
+      S.edit ? h('p', null, 'Right-click the canvas to add a role or process. Right-drag from one to the other to connect them.') : null));
+    return;
+  }
+  const item = itemOf(id);
+  const head = h('div', { class: 'head' });
+  const main = h('div', { class: 'col main' }, h('div', { class: 'eyebrow' }, TYPES[type].label));
+  if (S.edit) main.append(h('input', {
+    class: 'name', value: item.name, 'aria-label': `${TYPES[type].label} name`, placeholder: `Name this ${TYPES[type].label.toLowerCase()}`,
+    onchange: (e) => { const v = e.target.value.trim(); if (!v) { e.target.value = item.name; return; } commit(`rename ${type}`, d => { findIn(d, type, id).name = v; }); },
+    onkeydown: (e) => { if (e.key === 'Enter') e.target.blur(); },
+  }));
+  else main.append(h('div', { class: 'name' }, displayName(item, type)));
+  head.append(main);
+  if (type === 'role') head.append(h('div', { class: 'col' }, h('div', { class: 'eyebrow' }, 'Department'), deptTile(item)));
+
+  const body = h('div', { class: 'body', 'data-id': id });
+  // Description
+  const desc = h('section', { 'data-section': 'description' }, h('div', { class: 'sec-head' }, h('span', { class: 'eyebrow' }, 'Description')));
+  if (S.edit) {
+    const ta = h('textarea', { class: 'desc', 'aria-label': 'Description', placeholder: 'Add a description…', rows: 3,
+      onchange: (e) => commit('edit description', d => { const x = findIn(d, type, id); if (x.description === e.target.value) return false; x.description = e.target.value; }),
+      oninput: (e) => autoGrow(e.target) });
+    ta.value = item.description;
+    desc.append(ta);
+    requestAnimationFrame(() => autoGrow(ta));
+  } else desc.append(h('div', { class: 'desc' + (item.description.trim() ? '' : ' empty') }, item.description.trim() || 'No description yet.'));
+  body.append(desc);
+
+  if (type === 'role') body.append(...roleSections(item));
+  if (type === 'process') body.append(...processSections(item));
+  if (type === 'meeting') body.append(...meetingSections(item));
+  if (type === 'document') body.append(...documentSections(item));
+  if (S.edit) body.append(h('div', { class: 'foot' }, h('button', { class: 'delete', onclick: () => deleteEntity(id) }, icon('i-trash', 'ic sm'), `Delete ${TYPES[type].label.toLowerCase()}`)));
+
+  root.replaceChildren(head, body);
+  body.scrollTop = keepScroll;
+  if (pendingFinder) {
+    const f = $(`#detail [data-finder="${pendingFinder}"] input`);
+    pendingFinder = null;
+    if (f) f.focus({ preventScroll: true });
+  }
+}
+function autoGrow(ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight + 2, 320) + 'px'; }
+
+function deptTile(role) {
+  const dep = deptOf(role);
+  const label = dep ? (dep.name || 'Untitled department') : 'Unassigned';
+  const style = dep ? `background:${dep.colour}` : null;
+  if (!S.edit) return h('span', { class: 'tile role dept' + (dep ? '' : ' hatch'), style }, label);
+  return h('button', {
+    class: 'tile role dept' + (dep ? '' : ' hatch'), style, title: 'Change department', 'aria-haspopup': 'menu',
+    onclick: (e) => {
+      const anchor = e.currentTarget;
+      const f = finder({
+        key: 'dept', placeholder: 'Find or create a department',
+        candidates: () => [{ id: '__none', label: 'No department', colour: null }, ...S.data.departments.map(x => ({ id: x.id, label: x.name || 'Untitled department', colour: x.colour }))],
+        onPick: (depId) => { hideMenu(); commit('change department', d => { const r = findIn(d, 'role', role.id); const v = depId === '__none' ? null : depId; if (r.department === v) return false; r.department = v; }); },
+        onCreate: (name) => { hideMenu(); commit('create department', d => { const dep = { id: newId('dep'), name, colour: nextColour(d.departments.map(x => x.colour)) }; d.departments.push(dep); findIn(d, 'role', role.id).department = dep.id; }); },
+        createLabel: (name) => `Create department “${name}”`,
+        keepOpen: true,
+      });
+      f.style.cssText = 'margin:0;width:260px;padding:4px';
+      const r = anchor.getBoundingClientRect();
+      showMenu(null, r.right - 268, r.bottom + 6, { content: f, returnFocus: anchor });
+      $('input', f).focus();
+    },
+  }, label);
+}
+
+function section(key, iconId, title, ...kids) {
+  return h('section', { 'data-section': key }, h('div', { class: 'sec-head' }, icon(iconId), h('span', { class: 'eyebrow' }, title)), ...kids);
+}
+function emptyLine(text) { return h('div', { class: 'none' }, text); }
+/** One linked-item row: hover chevron to go there, the item tile, then tags and an unlink button. */
+function linkRow(targetId, tags = [], onRemove = null, removeLabel = 'Remove') {
+  const t = typeOf(targetId), x = itemOf(targetId);
+  const name = displayName(x, t);
+  const tileAttrs = { class: `tile ${t}`, onclick: () => select(targetId), title: `Go to ${name}` };
+  if (t === 'role') { const c = roleColour(x); tileAttrs.style = c ? `background:${c}` : null; if (!c) tileAttrs.class += ' hatch'; }
+  return h('div', { class: 'row', 'data-id': targetId },
+    h('span', { class: 'go', 'aria-hidden': 'true' }, icon('i-right')),
+    h('button', tileAttrs, t !== 'role' ? icon(TYPES[t].icon) : null, h('span', null, name)),
+    h('div', { class: 'tags' }, ...tags,
+      S.edit && onRemove ? h('button', { class: 'rm-link', title: removeLabel, 'aria-label': `${removeLabel}: ${name}`, onclick: onRemove }, icon('i-x', 'ic sm')) : null));
+}
+function raciView(link) {
+  return link.raci.map(k => h('span', {
+    class: 'raci' + (link.note ? ' has-note' : ''), 'data-tip': `${RACI_NAME[k]}${link.note ? ' — ' + link.note : ''}`,
+    'aria-label': RACI_NAME[k],
+  }, k));
+}
+function raciEdit(procId, roleId, link) {
+  return RACI.map(k => h('button', {
+    class: 'raci', 'aria-pressed': String(link.raci.includes(k)), title: RACI_NAME[k], 'aria-label': RACI_NAME[k],
+    onclick: () => commit(`set ${RACI_NAME[k].toLowerCase()}`, d => {
+      const l = findIn(d, 'process', procId).roles.find(x => x.role === roleId);
+      l.raci = l.raci.includes(k) ? l.raci.filter(v => v !== k) : RACI.filter(v => v === k || l.raci.includes(v));
+    }),
+  }, k));
+}
+function noteInput(procId, roleId, link) {
+  return h('input', {
+    class: 'note-input', value: link.note, placeholder: 'Add a note about this role’s part…', 'aria-label': 'RACI note',
+    onchange: (e) => commit('edit note', d => { findIn(d, 'process', procId).roles.find(x => x.role === roleId).note = e.target.value.trim(); }),
+    onkeydown: (e) => { if (e.key === 'Enter') e.target.blur(); },
+  });
+}
+function toggleTag(label, on, onclick, disabled = false) {
+  return h('button', { class: 'tag', 'aria-pressed': String(on), onclick, disabled }, label);
+}
+
+/** Search-to-find. candidates() → [{id,label,colour?,type?}] */
+function finder({ key, placeholder, candidates, onPick, onCreate = null, createLabel = null, keepOpen = false }) {
+  const input = h('input', { type: 'text', placeholder, 'aria-label': placeholder, autocomplete: 'off', spellcheck: 'false', role: 'combobox', 'aria-expanded': 'false' });
+  const list = h('div', { class: 'results', role: 'listbox', hidden: true });
+  const wrapEl = h('div', { class: 'finder', 'data-finder': key }, icon('i-search'), input, list);
+  let items = [], active = 0;
+  const build = () => {
+    const q = input.value.trim().toLowerCase();
+    const all = candidates();
+    const matches = all.filter(c => !q || c.label.toLowerCase().includes(q)).slice(0, 8);
+    items = matches.map(c => ({ ...c, run: () => onPick(c.id) }));
+    if (onCreate && q && !all.some(c => c.label.toLowerCase() === q)) {
+      const name = input.value.trim();
+      items.push({ create: true, label: createLabel(name), run: () => onCreate(name) });
+    }
+    active = clamp(active, 0, Math.max(0, items.length - 1));
+    list.replaceChildren(...(items.length ? items.map((it, i) => h('button', {
+      class: (it.create ? 'create' : '') + (i === active ? ' active' : ''), role: 'option', tabindex: '-1',
+      onmousedown: (e) => e.preventDefault(),
+      onclick: () => choose(i),
+    }, it.create ? icon('i-plus', 'ic sm') : (it.colour !== undefined ? h('span', { class: 'sw' + (it.colour ? '' : ' hatch'), style: it.colour ? `background:${it.colour}` : null }) : null), h('span', null, it.label)))
+      : [h('div', { class: 'empty' }, q ? 'No matches.' : 'Nothing left to add.')]));
+    list.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+  };
+  const choose = (i) => {
+    const it = items[i];
+    if (!it) return;
+    if (!keepOpen) pendingFinder = key;
+    input.value = '';
+    list.hidden = true;
+    it.run();
+  };
+  input.addEventListener('focus', () => { active = 0; build(); });
+  input.addEventListener('input', () => { active = 0; build(); });
+  input.addEventListener('blur', () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(active + 1, items.length - 1); build(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(active - 1, 0); build(); }
+    else if (e.key === 'Enter') { e.preventDefault(); choose(active); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (input.value) { input.value = ''; build(); } else { input.blur(); hideMenu(); } }
+  });
+  return wrapEl;
+}
+const roleCands = (exclude) => S.data.roles.filter(r => !exclude.has(r.id)).sort(byName).map(r => ({ id: r.id, label: displayName(r, 'role'), colour: roleColour(r) }));
+const plainCands = (type, exclude) => S.data[TYPES[type].list].filter(x => !exclude.has(x.id)).sort(byName).map(x => ({ id: x.id, label: displayName(x, type) }));
+
+function roleSections(role) {
+  const rid = role.id;
+  const procs = idx.roleProcs.get(rid);
+  const mtgs = idx.roleMeetings.get(rid);
+  const docs = idx.roleDocs.get(rid);
+  const secP = section('processes', 'i-cog', 'Processes');
+  if (!procs.length && !S.edit) secP.append(emptyLine('Not part of any process yet.'));
+  for (const { process, link } of procs) {
+    secP.append(linkRow(process.id, S.edit ? raciEdit(process.id, rid, link) : raciView(link),
+      () => commit('remove from process', d => { const p = findIn(d, 'process', process.id); p.roles = p.roles.filter(l => l.role !== rid); }), 'Remove from process'));
+    if (S.edit) secP.append(noteInput(process.id, rid, link));
+  }
+  if (S.edit) secP.append(finder({
+    key: 'role-proc', placeholder: 'Add to a process…',
+    candidates: () => plainCands('process', new Set(procs.map(x => x.process.id))),
+    onPick: (pid) => commit('add to process', d => linkRoleProcess(d, rid, pid)),
+    onCreate: (name) => commit('create process', d => { const p = createItem(d, 'process', { name }); p.roles.push({ role: rid, raci: [], note: '' }); }),
+    createLabel: (n) => `Create process “${n}”`,
+  }));
+  const secM = section('meetings', 'i-meeting', 'Meetings');
+  if (!mtgs.length && !S.edit) secM.append(emptyLine('Not in any meeting yet.'));
+  for (const { meeting, link } of mtgs) secM.append(linkRow(meeting.id, meetingTags(meeting.id, rid, link),
+    () => commit('remove from meeting', d => { const m = findIn(d, 'meeting', meeting.id); m.roles = m.roles.filter(l => l.role !== rid); }), 'Remove from meeting'));
+  if (S.edit) secM.append(finder({
+    key: 'role-mtg', placeholder: 'Add to a meeting…',
+    candidates: () => plainCands('meeting', new Set(mtgs.map(x => x.meeting.id))),
+    onPick: (mid) => commit('add to meeting', d => { findIn(d, 'meeting', mid).roles.push({ role: rid, chair: false, mandatory: false }); }),
+    onCreate: (name) => commit('create meeting', d => { createItem(d, 'meeting', { name, roles: [{ role: rid, chair: false, mandatory: false }] }); }),
+    createLabel: (n) => `Create meeting “${n}”`,
+  }));
+  const secD = section('documents', 'i-docs', 'Documents');
+  if (!docs.length && !S.edit) secD.append(emptyLine('Doesn’t own or review any documents yet.'));
+  for (const x of docs) secD.append(linkRow(x.document.id, docTags(x.document.id, rid, x.own),
+    () => commit('remove from document', d => { const doc = findIn(d, 'document', x.document.id); doc.owners = doc.owners.filter(r => r !== rid); doc.reviewers = doc.reviewers.filter(r => r !== rid); }), 'Remove from document'));
+  if (S.edit) secD.append(finder({
+    key: 'role-doc', placeholder: 'Add a document…',
+    candidates: () => plainCands('document', new Set(docs.map(x => x.document.id))),
+    onPick: (did) => commit('add document', d => { findIn(d, 'document', did).owners.push(rid); }),
+    onCreate: (name) => commit('create document', d => { createItem(d, 'document', { name, owners: [rid] }); }),
+    createLabel: (n) => `Create document “${n}”`,
+  }));
+  return [secP, secM, secD];
+}
+function meetingTags(mid, rid, link) {
+  if (!S.edit) return [link.chair ? h('span', { class: 'tag' }, 'Chair') : null, link.mandatory ? h('span', { class: 'tag outline' }, 'Mandatory') : null];
+  const flip = (k) => () => commit(`set ${k}`, d => { const l = findIn(d, 'meeting', mid).roles.find(x => x.role === rid); l[k] = !l[k]; });
+  return [toggleTag('Chair', link.chair, flip('chair')), toggleTag('Mandatory', link.mandatory, flip('mandatory'))];
+}
+function docTags(did, rid, own) {
+  if (!S.edit) return [own ? h('span', { class: 'tag' }, 'Own') : h('span', { class: 'tag outline' }, 'Review')];
+  const setOwn = (v) => () => commit(v ? 'make owner' : 'make reviewer', d => {
+    const doc = findIn(d, 'document', did);
+    doc.owners = doc.owners.filter(r => r !== rid); doc.reviewers = doc.reviewers.filter(r => r !== rid);
+    (v ? doc.owners : doc.reviewers).push(rid);
+  });
+  return [toggleTag('Own', own, own ? null : setOwn(true)), toggleTag('Review', !own, own ? setOwn(false) : null)];
+}
+
+function processSections(p) {
+  const pid = p.id;
+  const secR = section('roles', 'i-person', 'Roles');
+  if (!p.roles.length && !S.edit) secR.append(emptyLine('No roles yet.'));
+  for (const r of rolesSorted(p.roles.map(l => l.role))) {
+    const link = p.roles.find(l => l.role === r.id);
+    secR.append(linkRow(r.id, S.edit ? raciEdit(pid, r.id, link) : raciView(link),
+      () => commit('remove role', d => { const x = findIn(d, 'process', pid); x.roles = x.roles.filter(l => l.role !== r.id); }), 'Remove role'));
+    if (S.edit) secR.append(noteInput(pid, r.id, link));
+    else if (link.note) secR.append(h('div', { class: 'note' }, link.note));
+  }
+  if (S.edit) secR.append(finder({
+    key: 'proc-role', placeholder: 'Add a role…',
+    candidates: () => roleCands(new Set(p.roles.map(l => l.role))),
+    onPick: (rid) => commit('add role', d => linkRoleProcess(d, rid, pid)),
+    onCreate: (name) => commit('create role', d => { const r = createItem(d, 'role', { name }); findIn(d, 'process', pid).roles.push({ role: r.id, raci: [], note: '' }); }),
+    createLabel: (n) => `Create role “${n}”`,
+  }));
+  const refSection = (key, iconId, title, listKey, type, emptyText) => {
+    const sec = section(key, iconId, title);
+    if (!p[listKey].length && !S.edit) sec.append(emptyLine(emptyText));
+    for (const xid of p[listKey]) {
+      const x = itemOf(xid);
+      const tags = type === 'meeting' && x.cadence ? [h('span', { class: 'tag outline' }, CADENCE_LABEL[x.cadence])] : [];
+      sec.append(linkRow(xid, tags, () => commit(`remove ${type}`, d => { const q = findIn(d, 'process', pid); q[listKey] = q[listKey].filter(v => v !== xid); }), `Remove ${type} from process`));
+    }
+    if (S.edit) sec.append(finder({
+      key: 'proc-' + type, placeholder: `Add a ${type}…`,
+      candidates: () => plainCands(type, new Set(p[listKey])),
+      onPick: (xid) => commit(`add ${type}`, d => { findIn(d, 'process', pid)[listKey].push(xid); }),
+      onCreate: (name) => commit(`create ${type}`, d => { const x = createItem(d, type, { name }); findIn(d, 'process', pid)[listKey].push(x.id); }),
+      createLabel: (n) => `Create ${type} “${n}”`,
+    }));
+    return sec;
+  };
+  return [secR, refSection('meetings', 'i-meeting', 'Meetings', 'meetings', 'meeting', 'No meetings yet.'), refSection('documents', 'i-docs', 'Documents', 'documents', 'document', 'No documents yet.')];
+}
+
+function partOfSection(x, type) {
+  const procs = idx.procsOf.get(x.id) || [];
+  const sec = section('processes', 'i-cog', 'Part of');
+  if (!procs.length && !S.edit) sec.append(emptyLine('Not part of any process yet.'));
+  const listKey = TYPES[type].list;
+  for (const p of procs) sec.append(linkRow(p.id, [], () => commit(`remove from process`, d => { const q = findIn(d, 'process', p.id); q[listKey] = q[listKey].filter(v => v !== x.id); }), 'Remove from process'));
+  if (S.edit) sec.append(finder({
+    key: type + '-proc', placeholder: 'Add to a process…',
+    candidates: () => plainCands('process', new Set(procs.map(p => p.id))),
+    onPick: (pid) => commit('add to process', d => { findIn(d, 'process', pid)[listKey].push(x.id); }),
+  }));
+  return sec;
+}
+function meetingSections(m) {
+  const mid = m.id;
+  const secC = section('cadence', 'i-calendar', 'Cadence');
+  if (S.edit) {
+    const sel = h('select', { 'aria-label': 'Cadence', onchange: (e) => commit('set cadence', d => { findIn(d, 'meeting', mid).cadence = e.target.value || null; }) },
+      h('option', { value: '' }, 'Not specified'), CADENCES.map(c => h('option', { value: c }, CADENCE_LABEL[c])));
+    sel.value = m.cadence || '';
+    secC.append(sel);
+  } else secC.append(h('div', { class: 'cadence' }, h('span', { class: m.cadence ? 'val' : 'none' }, m.cadence ? CADENCE_LABEL[m.cadence] : 'Not specified')));
+  const secR = section('roles', 'i-person', 'Roles');
+  if (!m.roles.length && !S.edit) secR.append(emptyLine('No roles yet.'));
+  for (const r of rolesSorted(m.roles.map(l => l.role))) {
+    const link = m.roles.find(l => l.role === r.id);
+    secR.append(linkRow(r.id, meetingTags(mid, r.id, link), () => commit('remove role', d => { const x = findIn(d, 'meeting', mid); x.roles = x.roles.filter(l => l.role !== r.id); }), 'Remove role'));
+  }
+  if (S.edit) secR.append(finder({
+    key: 'mtg-role', placeholder: 'Add a role…',
+    candidates: () => roleCands(new Set(m.roles.map(l => l.role))),
+    onPick: (rid) => commit('add role', d => { findIn(d, 'meeting', mid).roles.push({ role: rid, chair: false, mandatory: false }); }),
+    onCreate: (name) => commit('create role', d => { const r = createItem(d, 'role', { name }); findIn(d, 'meeting', mid).roles.push({ role: r.id, chair: false, mandatory: false }); }),
+    createLabel: (n) => `Create role “${n}”`,
+  }));
+  return [secC, secR, partOfSection(m, 'meeting')];
+}
+function documentSections(doc) {
+  const did = doc.id;
+  const people = (key, title, listKey, other, emptyText) => {
+    const sec = section(key, 'i-person', title);
+    if (!doc[listKey].length && !S.edit) sec.append(emptyLine(emptyText));
+    for (const r of rolesSorted(doc[listKey])) sec.append(linkRow(r.id, [], () => commit(`remove ${key === 'owners' ? 'owner' : 'reviewer'}`, d => { const x = findIn(d, 'document', did); x[listKey] = x[listKey].filter(v => v !== r.id); }), `Remove ${key === 'owners' ? 'owner' : 'reviewer'}`));
+    if (S.edit) sec.append(finder({
+      key: 'doc-' + key, placeholder: key === 'owners' ? 'Add an owner…' : 'Add a reviewer…',
+      candidates: () => roleCands(new Set(doc[listKey])),
+      onPick: (rid) => commit(`add ${key === 'owners' ? 'owner' : 'reviewer'}`, d => { const x = findIn(d, 'document', did); x[other] = x[other].filter(v => v !== rid); x[listKey].push(rid); }),
+      onCreate: (name) => commit('create role', d => { const r = createItem(d, 'role', { name }); findIn(d, 'document', did)[listKey].push(r.id); }),
+      createLabel: (n) => `Create role “${n}”`,
+    }));
+    return sec;
+  };
+  return [people('owners', 'Owned by', 'owners', 'reviewers', 'No owner yet.'), people('reviewers', 'Reviewers', 'reviewers', 'owners', 'No reviewers yet.'), partOfSection(doc, 'document')];
+}
+
+/* ── Tooltip (RACI notes etc.) ── */
+const tipEl = $('#tooltip');
+document.addEventListener('mouseover', (e) => {
+  const t = e.target.closest && e.target.closest('[data-tip]');
+  if (!t) { tipEl.classList.remove('show'); return; }
+  tipEl.textContent = t.dataset.tip;
+  const r = t.getBoundingClientRect();
+  tipEl.classList.add('show');
+  const tr = tipEl.getBoundingClientRect();
+  tipEl.style.left = clamp(r.left + r.width / 2 - tr.width / 2, 8, window.innerWidth - tr.width - 8) + 'px';
+  tipEl.style.top = (r.top - tr.height - 8 < 8 ? r.bottom + 8 : r.top - tr.height - 8) + 'px';
+});
+
+/* ═══════════════════════════ Toast ═══════════════════════════ */
+let toastTimer = null;
+function toast(msg, kind) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.classList.toggle('error', kind === 'error');
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), kind === 'error' ? 6000 : 2800);
+}
+
+/* ═══════════════════════════ Files ═══════════════════════════ */
+const FILE_TYPES = [{ description: 'Orrery organisation (JSON)', accept: { 'application/json': ['.json'] } }];
+function confirmDiscard() {
+  return !S.dirty || window.confirm('You have unsaved changes. Discard them?');
+}
+function loadData(json, meta = {}) {
+  const { data, dropped } = normalise(json);
+  S.data = data;
+  S.fileHandle = meta.handle || null;
+  S.fileName = meta.name || null;
+  S.undo = []; S.redo = [];
+  S.sel = null; S.hover = null; S.legendHover = null;
+  setSearch('');
+  simNodes.clear(); structureSig = ''; lastPos = new Map(); simStale = false;
+  gCards.selectAll('g.card').remove();
+  idx = buildIndex(S.data);
+  syncSim();
+  settle();
+  S.hist = [{ view: S.view, sel: null }]; S.histIdx = 0;
+  S.dirty = false;
+  refresh();
+  fit({ animate: false });
+  return dropped;
+}
+function loadText(text, name, handle) {
+  let json;
+  try { json = JSON.parse(text); }
+  catch (err) {
+    const m = /line (\d+)/.exec(err.message) || null;
+    let line = m ? +m[1] : null;
+    const pos = /position (\d+)/.exec(err.message);
+    if (!line && pos) line = text.slice(0, +pos[1]).split('\n').length;
+    // Newer engines quote ~10 characters either side of the error instead of giving a position.
+    const ctx = /, (\.\.\.)?"([\s\S]+)"(?:\.\.\.)? is not valid JSON$/.exec(err.message);
+    if (!line && ctx && text.indexOf(ctx[2]) >= 0) line = text.slice(0, text.indexOf(ctx[2]) + (ctx[1] ? 10 : 0)).split('\n').length;
+    if (!line && /end of JSON/i.test(err.message)) line = text.split('\n').length;
+    toast(`${name} isn’t valid JSON${line ? ` (line ${line})` : ''}. Nothing was changed.`, 'error');
+    return false;
+  }
+  if (!isObj(json)) { toast(`${name} doesn’t contain an organisation. Nothing was changed.`, 'error'); return false; }
+  const dropped = loadData(json, { name, handle });
+  toast(dropped ? `Opened ${name}. Removed ${dropped} link${dropped === 1 ? '' : 's'} to items that don’t exist.` : `Opened ${name}.`);
+  return true;
+}
+async function openFile() {
+  if (!confirmDiscard()) return;
+  if (window.showOpenFilePicker) {
+    try {
+      const [handle] = await window.showOpenFilePicker({ types: FILE_TYPES });
+      const f = await handle.getFile();
+      loadText(await f.text(), f.name, handle);
+    } catch (e) { if (e.name !== 'AbortError') toast(`Couldn’t open the file: ${e.message}`, 'error'); }
+  } else $('#file-input').click();
+}
+$('#file-input').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (f) loadText(await f.text(), f.name, null);
+});
+function loadExample() {
+  if (!confirmDiscard()) return;
+  loadData(structuredClone(EXAMPLE), { name: null });
+  toast('Loaded the example organisation.');
+}
+const serialise = () => JSON.stringify(S.data, null, 2) + '\n';
+const suggestedName = () => S.fileName || (S.data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'organisation') + '.json';
+async function save() {
+  if (document.activeElement && document.activeElement.matches('input, textarea')) document.activeElement.blur();
+  if (S.fileHandle && S.fileHandle.createWritable) {
+    try {
+      const w = await S.fileHandle.createWritable();
+      await w.write(serialise()); await w.close();
+      setDirty(false);
+      toast(`Saved ${S.fileName}.`);
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError' || e.name === 'NotAllowedError') { toast('Not saved: permission to write the file was refused. Try Save as….', 'error'); return; }
+    }
+  }
+  return saveAs();
+}
+async function saveAs() {
+  if (document.activeElement && document.activeElement.matches('input, textarea')) document.activeElement.blur();
+  const name = suggestedName();
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({ suggestedName: name, types: FILE_TYPES });
+      const w = await handle.createWritable();
+      await w.write(serialise()); await w.close();
+      S.fileHandle = handle; S.fileName = handle.name;
+      setDirty(false);
+      toast(`Saved ${handle.name}.`);
+      return;
+    } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const a = h('a', { href: URL.createObjectURL(new Blob([serialise()], { type: 'application/json' })), download: name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  S.fileName = name;
+  setDirty(false);
+  toast(`Downloaded ${name}.`);
+}
+window.addEventListener('beforeunload', (e) => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+// Drag a JSON file onto the window to open it.
+let dragDepth = 0;
+const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+window.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; $('#drop').hidden = false; });
+window.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+window.addEventListener('dragleave', (e) => { if (!hasFiles(e)) return; if (--dragDepth <= 0) { dragDepth = 0; $('#drop').hidden = true; } });
+window.addEventListener('drop', async (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault(); dragDepth = 0; $('#drop').hidden = true;
+  const f = e.dataTransfer.files[0];
+  if (f && confirmDiscard()) loadText(await f.text(), f.name, null);
+});
+
+/* ═══════════════════════════ Start ═══════════════════════════ */
+window.addEventListener('resize', () => { hideMenu(); updateReveal(); });
+applyPrefs();
+S.data = emptyData();
+idx = buildIndex(S.data);
+S.hist = [{ view: 'graph', sel: null }]; S.histIdx = 0;
+if (new URLSearchParams(location.search).has('example')) loadData(structuredClone(EXAMPLE));
+else { refresh(); fit({ animate: false }); }
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => {
+  mcache.clear();
+  const wasEmpty = !S.data.roles.length && !S.data.processes.length;
+  refresh();
+  if (!wasEmpty && S.view === 'graph') { settle(90); positionGraph(); fit({ animate: false }); }
+});
+
+// Hook for automated tests and the console.
+window.orrery = {
+  load: (json, name = 'test.json') => loadData(json, { name }),
+  loadText: (text, name = 'test.json') => loadText(text, name, null),
+  loadExample: () => loadData(structuredClone(EXAMPLE)),
+  example: () => structuredClone(EXAMPLE),
+  normalise: (json) => normalise(json),
+  data: () => structuredClone(S.data),
+  state: () => ({ view: S.view, sel: S.sel, edit: S.edit, dirty: S.dirty, search: S.search, undo: S.undo.length, redo: S.redo.length, histIdx: S.histIdx, hist: S.hist.length, fileName: S.fileName, morphing, simAlpha: sim.alpha() }),
+  setView: (v) => setView(v),
+  select: (id) => select(id),
+  edit: (on) => toggleEdit(on),
+  undo, redo, fit, resetView,
+  settle: () => { sim.stop(); settle(); positionGraph(); },
+  serialise,
+};
+
+</script>
+</body>
+</html>

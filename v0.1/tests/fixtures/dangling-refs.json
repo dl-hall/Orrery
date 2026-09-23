@@ -1,0 +1,14 @@
+{
+  "title": "Dangling",
+  "departments": [{ "id": "dep-a", "name": "Alpha" }],
+  "roles": [
+    { "id": "rol-1", "name": "Keeper", "department": "dep-a" },
+    { "id": "rol-2", "name": "Orphan", "department": "dep-missing" }
+  ],
+  "processes": [
+    { "id": "pro-1", "name": "Proc", "roles": [{ "role": "rol-1", "raci": ["R", "X"] }, { "role": "rol-ghost" }], "meetings": ["mtg-ghost"], "documents": ["doc-1"] }
+  ],
+  "meetings": [],
+  "documents": [{ "id": "doc-1", "name": "Doc", "owners": ["rol-1", "rol-ghost"], "reviewers": [] }],
+  "customField": { "kept": true }
+}

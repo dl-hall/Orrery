@@ -1,0 +1,12 @@
+{
+  "name": "orrery-v0.1-tests",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "shots": "node screenshots.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "d3": "7.9.0"
+  }
+}
