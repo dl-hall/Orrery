@@ -38,6 +38,8 @@ In edit mode the right panel edits everything else:
 
 Each list has a search box to add existing items or create new ones. Departments can be renamed, recoloured or deleted in the legend.
 
+A process shows the first sentence of its description under its name, in the graph (up to three lines) and the process table header (up to two), so a process isn't confused with a document of the same name. Hover to see the whole sentence when it's cut short. The same sentence appears under each process in the *Add to a process…* search box, and as a tooltip on process links in the right panel. The sentence ends at the first `.`, `!` or `?` that starts a new sentence, so `e.g.` and `Dr.` don't cut it short.
+
 In the graph, click a department in the legend (or its eye button) to collapse its roles into small coloured dots; click again to expand them. This is a view setting only: it doesn't affect the table views and isn't saved to the file.
 
 ## Warnings

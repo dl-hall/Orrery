@@ -107,6 +107,7 @@ input, textarea, select { font: inherit; color: inherit; }
 .card.t-process .shape { fill: var(--surface); stroke: var(--ink); }
 .card.t-process text { fill: var(--ink); font: 500 14px var(--font-ui); }
 .card.t-process.k-header text { font-size: 15px; font-weight: 600; }
+.card.t-process text.desc { fill: var(--muted); font: 400 11.5px var(--font-ui); }
 .card.t-meeting .shape, .card.t-document .shape { fill: var(--surface); stroke: var(--rule-strong); stroke-width: 1; }
 .card.t-meeting text, .card.t-document text { fill: var(--ink); font: 500 12.5px var(--font-ui); }
 .card.t-meeting.k-header text { font-size: 14px; font-weight: 600; }
@@ -331,6 +332,8 @@ button.tag:disabled { cursor: default; }
 .finder .results button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: 6px; text-align: left; }
 .finder .results button.active { background: var(--hover); }
 .finder .results .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.finder .results .lbl { min-width: 0; flex: 1; }
+.finder .results .lbl .sub { display: block; color: var(--muted); font-size: 12px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .finder .results .create { color: var(--brass-text); font-weight: 600; }
 .finder .results .empty { color: var(--muted); padding: 6px 8px; font-size: 13px; }
 
@@ -1051,6 +1054,7 @@ const F = {
   roleRow: '600 12.5px "Instrument Sans", system-ui, sans-serif',
   meetHead: '600 14px "Instrument Sans", system-ui, sans-serif',
   chip: '500 9.5px "IBM Plex Mono", ui-monospace, monospace',
+  desc: '400 11.5px "Instrument Sans", system-ui, sans-serif',
 };
 const measureCtx = document.createElement('canvas').getContext('2d');
 const mcache = new Map();
@@ -1081,6 +1085,18 @@ function wrap(text, maxW, font, maxLines = 2) {
     return keep;
   }
   return lines.map(l => ellipsize(l, maxW, font));
+}
+// A "." ends a sentence only before a capital, digit or opening quote (or at the end), and never after a
+// common abbreviation, so "e.g. vendor reviews" stays whole. "!" and "?" end one before a space; so does a line break.
+const SENTENCE_END = /(?<!\b(?:[Ee]\.g|[Ii]\.e|vs|cf|approx|incl|Dr|Mr|Mrs|Ms|St|No))\.(?=\s+[\p{Lu}\p{N}"“'‘(]|\s*$)|[!?]+(?=\s|$)|\n/u;
+function firstSentence(s) { const t = str(s).trim(); const i = t.search(SENTENCE_END); return (i < 0 ? t : t.slice(0, i)).trim(); }
+/** A process's one-line gloss: its description's first sentence, unless that just repeats the name. */
+function procBlurb(p) { const s = firstSentence(p.description); return s && s.toLowerCase() !== str(p.name).trim().toLowerCase() ? s : ''; }
+/** Wrap a gloss for a card; tip is the full sentence when the lines had to cut it short. */
+function wrapBlurb(blurb, maxW, maxLines) {
+  const desc = wrap(blurb, maxW, F.desc, maxLines);
+  const squash = s => s.replace(/\s+/g, ' ').trim();
+  return { desc, tip: squash(desc.join(' ')) === squash(blurb) ? null : blurb };
 }
 const maxLineW = (lines, font) => Math.max(0, ...lines.map(l => textW(l, font)));
 const chipW = c => Math.ceil(textW(c.t, F.chip) + 11);
@@ -1121,8 +1137,15 @@ function nodeGeom(item, type, collapsed = false) {
     const lines = wrap(name, 124, F.role, 2);
     return { lines, w: Math.max(96, Math.ceil(maxLineW(lines, F.role)) + 28), h: lines.length * 16 + 18, collapsed: false };
   }
+  const blurb = procBlurb(item);
+  if (blurb) {
+    // With a gloss the box is a fixed width, so the sentence gets a readable measure.
+    const w = CW, lines = wrap(name, w - 34, F.proc, 2);
+    const { desc, tip } = wrapBlurb(blurb, w - 28, 3);
+    return { lines, w, h: lines.length * 18 + desc.length * 14 + 34, desc, descTip: tip, collapsed: false };
+  }
   const lines = wrap(name, 150, F.proc, 2);
-  return { lines, w: Math.max(118, Math.ceil(maxLineW(lines, F.proc)) + 34), h: lines.length * 18 + 26, collapsed: false };
+  return { lines, w: Math.max(118, Math.ceil(maxLineW(lines, F.proc)) + 34), h: lines.length * 18 + 26, desc: null, descTip: null, collapsed: false };
 }
 
 function rectCollide(pad) {
@@ -1248,7 +1271,7 @@ function graphCards() {
     const item = itemOf(n.id);
     const c = { key: n.id, id: n.id, type: n.type, kind: 'node', node: n, x: n.x, y: n.y, w: n.w, h: n.h, lines: n.lines, align: 'center', pinned: n.fx != null };
     if (n.type === 'role') { c.fill = roleColour(item); c.font = F.role; c.lh = 16; if (n.collapsed) { c.collapsed = true; c.tip = displayName(item, 'role'); } }
-    else { c.font = F.proc; c.lh = 18; c.badges = { meeting: item.meetings.length, document: item.documents.length }; c.pad = -3; }
+    else { c.font = F.proc; c.lh = 18; c.desc = n.desc; c.dlh = 14; c.tip = n.descTip; c.badges = { meeting: item.meetings.length, document: item.documents.length }; c.pad = -3; }
     return c;
   });
 }
@@ -1363,7 +1386,9 @@ function headerCard(type, item) {
   const name = displayName(item, type);
   if (type === 'process') {
     const lines = wrap(name, CW - 30, F.procHead, 3);
-    return { id: item.id, type, kind: 'header', w: CW, h: lines.length * 19 + 26, lines, font: F.procHead, lh: 19, align: 'center', pad: -3 };
+    const blurb = procBlurb(item);
+    const { desc, tip } = blurb ? wrapBlurb(blurb, CW - 28, 2) : { desc: null, tip: null };
+    return { id: item.id, type, kind: 'header', w: CW, h: lines.length * 19 + 26 + (desc ? desc.length * 14 + 8 : 0), lines, font: F.procHead, lh: 19, align: 'center', pad: -3, desc, dlh: 14, tip };
   }
   if (type === 'role') {
     const lines = wrap(name, CW - 26, F.roleHead, 2);
@@ -1386,7 +1411,7 @@ function rowCard(type, item, chips) {
 }
 
 /* ═══════════════════════════ Cards: drawing ═══════════════════════════ */
-function sigOf(c) { return JSON.stringify([c.type, c.kind, c.w, c.h, c.lines, c.fill, c.icon, c.chips, c.sub, c.badges, c.pinned, c.align, c.warn, c.collapsed, c.tip]); }
+function sigOf(c) { return JSON.stringify([c.type, c.kind, c.w, c.h, c.lines, c.desc, c.fill, c.icon, c.chips, c.sub, c.badges, c.pinned, c.align, c.warn, c.collapsed, c.tip]); }
 function setBox(sel, w, h, pad, r) {
   return sel.attr('x', -w / 2 - pad).attr('y', -h / 2 - pad).attr('width', w + pad * 2).attr('height', h + pad * 2).attr('rx', r + pad);
 }
@@ -1417,16 +1442,25 @@ function drawInner(g, c, t) {
     shape.transition(t).call(s => setBox(s, c.w, c.h, 0, r));
     ring.transition(t).call(s => setBox(s, c.w, c.h, 4, r));
   } else { setBox(shape, c.w, c.h, 0, r); setBox(ring, c.w, c.h, 4, r); }
-  if (c.collapsed) { if (c.tip) body.attr('data-tip', c.tip); return; }   // a plain dot: no text, badges or marks
+  if (c.tip) body.attr('data-tip', c.tip);
+  if (c.collapsed) return;   // a plain dot: no text, badges or marks
 
   const content = body.append('g').attr('class', 'content');
   if (grow) content.attr('opacity', 0).transition(t).attr('opacity', 1);
   const subH = c.sub ? 16 : 0;
+  const DGAP = 6;   // between the name and its gloss
+  const descH = c.desc ? DGAP + c.desc.length * c.dlh : 0;
   const n = c.lines.length;
-  const y0 = -((n * c.lh + subH) / 2) + c.lh * 0.74 + (c.pad || 0) * 0;
+  const y0 = -((n * c.lh + subH + descH) / 2) + c.lh * 0.74;
   const text = content.append('text').attr('class', 'label').style('font', c.font).attr('text-anchor', c.align === 'center' ? 'middle' : 'start');
   const tx = c.align === 'center' ? 0 : -c.w / 2 + c.padL;
   c.lines.forEach((line, i) => text.append('tspan').attr('x', tx).attr('y', y0 + i * c.lh).text(line));
+  if (c.desc) {
+    // The gloss sits left-aligned under the name, whatever the name's alignment.
+    const dy0 = y0 + (n - 1) * c.lh + (c.lh - c.lh * 0.74) + DGAP + c.dlh * 0.8;
+    const dt = content.append('text').attr('class', 'desc');
+    c.desc.forEach((line, i) => dt.append('tspan').attr('x', -c.w / 2 + 14).attr('y', dy0 + i * c.dlh).text(line));
+  }
   if (c.sub) content.append('text').attr('class', 'sub').attr('text-anchor', 'middle').attr('y', y0 + n * c.lh + 1).text(c.sub.toUpperCase());
   if (c.icon) content.append('use').attr('href', '#' + c.icon).attr('class', 'kicon')
     .attr('x', -c.w / 2 + 10).attr('y', -8).attr('width', 16).attr('height', 16);
@@ -1450,7 +1484,7 @@ function drawInner(g, c, t) {
       const bg = content.append('g').attr('class', 'badge').attr('transform', `translate(${-c.w / 2 + 14 + i * 22},${c.h / 2})`);
       bg.append('circle').attr('r', 9.5);
       bg.append('use').attr('href', '#' + ic).attr('class', 'kicon').attr('x', -6).attr('y', -6).attr('width', 12).attr('height', 12);
-      bg.append('title').text(label);
+      bg.attr('data-tip', label);
     });
   }
   if (c.warn) {
@@ -1817,6 +1851,11 @@ function onCardDblClick(e, c) {
   if (S.view === 'graph') setFocus(c.id);
 }
 svg.on('mouseleave', () => { if (S.hover) { S.hover = null; applyHighlight(); } });
+// A hover picked up after a view switch (a card drawn under a still pointer) never gets its mouseleave,
+// so moving over bare canvas clears whatever hover is left.
+svg.on('mousemove.hover', (e) => {
+  if (S.hover && !(e.target.closest && e.target.closest('g.card'))) { S.hover = null; S.hoverKey = null; applyHighlight(); }
+});
 svg.on('click', (e) => {
   if (e.target.closest && e.target.closest('g.card')) return;
   select(null, { push: false });
@@ -2351,6 +2390,9 @@ function linkRow(targetId, tags = [], onRemove = null, removeLabel = 'Remove', w
   const name = displayName(x, t);
   const tileAttrs = { class: `tile ${t}`, onclick: () => select(targetId), title: `Go to ${name}` };
   if (t === 'role') { const c = roleColour(x); tileAttrs.style = c ? `background:${c}` : null; if (!c) tileAttrs.class += ' hatch'; }
+  // A process's gloss shows as its tooltip (in place of the plain "Go to" title, so only one appears).
+  const blurb = t === 'process' ? procBlurb(x) : '';
+  if (blurb) { delete tileAttrs.title; tileAttrs['data-tip'] = blurb; tileAttrs['aria-description'] = blurb; }
   return h('div', { class: 'row', 'data-id': targetId },
     h('span', { class: 'go', 'aria-hidden': 'true' }, icon('i-right')),
     h('button', tileAttrs, t !== 'role' ? icon(TYPES[t].icon) : null, h('span', null, name)),
@@ -2404,7 +2446,7 @@ function finder({ key, placeholder, candidates, onPick, onCreate = null, createL
       class: (it.create ? 'create' : '') + (i === active ? ' active' : ''), role: 'option', tabindex: '-1',
       onmousedown: (e) => e.preventDefault(),
       onclick: () => choose(i),
-    }, it.create ? icon('i-plus', 'ic sm') : (it.colour !== undefined ? h('span', { class: 'sw' + (it.colour ? '' : ' hatch'), style: it.colour ? `background:${it.colour}` : null }) : null), h('span', null, it.label)))
+    }, it.create ? icon('i-plus', 'ic sm') : (it.colour !== undefined ? h('span', { class: 'sw' + (it.colour ? '' : ' hatch'), style: it.colour ? `background:${it.colour}` : null }) : null), h('span', { class: 'lbl' }, it.label, it.sub ? h('span', { class: 'sub' }, it.sub) : null)))
       : [h('div', { class: 'empty' }, q ? 'No matches.' : 'Nothing left to add.')]));
     list.hidden = false;
     input.setAttribute('aria-expanded', 'true');
@@ -2429,7 +2471,8 @@ function finder({ key, placeholder, candidates, onPick, onCreate = null, createL
   return wrapEl;
 }
 const roleCands = (exclude) => S.data.roles.filter(r => !exclude.has(r.id)).sort(byName).map(r => ({ id: r.id, label: displayName(r, 'role'), colour: roleColour(r) }));
-const plainCands = (type, exclude) => S.data[TYPES[type].list].filter(x => !exclude.has(x.id)).sort(byName).map(x => ({ id: x.id, label: displayName(x, type) }));
+const plainCands = (type, exclude) => S.data[TYPES[type].list].filter(x => !exclude.has(x.id)).sort(byName)
+  .map(x => ({ id: x.id, label: displayName(x, type), sub: type === 'process' ? procBlurb(x) : '' }));
 
 function roleSections(role) {
   const rid = role.id;
@@ -2815,7 +2858,7 @@ window.orrery = {
   focus: (id) => setFocus(id),
   warnings: () => idx.warn.list.map(w => ({ ...w })),
   edit: (on) => toggleEdit(on),
-  undo, redo, fit, resetView,
+  undo, redo, fit, resetView, firstSentence,
   settle: () => { sim.stop(); settle(); positionGraph(); },
   serialise,
 };
