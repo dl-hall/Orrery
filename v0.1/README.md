@@ -18,11 +18,14 @@ Tip: `orrery.html?example` opens straight into the example.
 | Undo or redo | Round arrows (Ctrl+Z / Ctrl+Y) |
 | Edit | Pencil or **E**. A brass *Edit mode* tab shows at the top while it's on. |
 | Pan and zoom | Drag empty space; mouse wheel. Zoom buttons appear near the bottom middle. **F** fits everything to the screen. |
+| Focus on a node | Double-click a role or process in the graph. It moves to the centre with only its direct connections around it. Double-click another node to move focus there. Leave with **Show full graph** in the bar at the top, **1**, *Graph* in the view menu, or Esc. |
 | Move a node | Drag it. It stays pinned (brass dot) until **Reset view** in the panel under the toolbar. |
 | Search | Move the pointer to the top edge, or press Ctrl+F or **/**. Enter selects the first match. |
 | Add a role or process | Edit mode → right-click empty canvas |
 | Connect a role and a process | Edit mode → right-drag from one onto the other |
 | Delete | Edit mode → right-click a node, press Delete, or use **Delete** in the panel. Undo brings it back. |
+| Check for mistakes | **Warnings** in the panel under the toolbar, or **W**, lists every discrepancy. Click an item to go to it. Yellow triangles mark the same problems in the right panel and on table cards. **Marks on/off** next to it hides the triangles. |
+| Fill a meeting from its processes | Edit mode → select the meeting → **Add process roles** beside *Roles*. If the meeting is in several processes, pick one or all from the drop-down. |
 | Hide panels | Round arrow buttons on each panel. Panels remember whether they were hidden. |
 
 In edit mode the right panel edits everything else:
@@ -34,6 +37,19 @@ In edit mode the right panel edits everything else:
 - departments: pick one, or type a new name to create it
 
 Each list has a search box to add existing items or create new ones. Departments can be renamed, recoloured or deleted in the legend.
+
+## Warnings
+
+| Warning | When |
+|---|---|
+| Meeting role outside the meeting's processes | A role attends a meeting but isn't in any process the meeting is part of |
+| Document owner outside the document's processes | A role owns a document but isn't in any process the document is part of (reviewers aren't checked) |
+| Meeting not part of any process | |
+| Document not part of any process | |
+| Role not part of any process | |
+| Process with no roles | |
+
+In the meeting table, chairs are listed first.
 
 ## File format
 

@@ -232,3 +232,77 @@ test('Delete key and node context menu delete in edit mode', async ({ page }) =>
   await page.getByRole('menuitem', { name: /Delete role “Project lead”/ }).click();
   expect((await data(page)).roles.find(r => r.id === 'rol-project-lead')).toBeUndefined();
 });
+
+test('the rubber band disappears after a right-drag, whether or not it connects', async ({ page }) => {
+  await openApp(page);
+  await page.keyboard.press('e');
+  const rubber = page.locator('#stage .rubber');
+  const display = () => rubber.evaluate(el => getComputedStyle(el).display);
+  // Valid target: connects.
+  await rightDrag(page, await center(card(page, 'rol-scientist')), await center(card(page, 'pro-product-marketing-announcement')));
+  expect(await display()).toBe('none');
+  expect((await data(page)).processes[1].roles.some(l => l.role === 'rol-scientist')).toBe(true);
+  // Invalid target (role onto role) and empty canvas.
+  await rightDrag(page, await center(card(page, 'rol-scientist')), await center(card(page, 'rol-market-analyst')));
+  expect(await display()).toBe('none');
+  await rightDrag(page, await center(card(page, 'rol-scientist')), await emptySpot(page));
+  expect(await display()).toBe('none');
+});
+
+test('Add process roles: one process adds only the missing roles in one step', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    const d = window.orrery.example();
+    d.meetings[0].roles = d.meetings[0].roles.slice(0, 2);
+    window.orrery.load(d);
+    window.orrery.edit(true);
+    window.orrery.select('mtg-quarterly-design-review');
+  });
+  const btn = section(page, 'roles').locator('.sec-action');
+  await expect(btn).toBeEnabled();
+  await btn.click();
+  const roles = (await data(page)).meetings[0].roles;
+  expect(roles.map(l => l.role).sort()).toEqual(['rol-design-engineer', 'rol-engineering-manager', 'rol-project-lead', 'rol-research-manager', 'rol-scientist', 'rol-system-engineer']);
+  expect(roles.find(l => l.role === 'rol-system-engineer').chair).toBe(true);  // existing links untouched
+  await expect(page.locator('#toast')).toContainText('Added 4 roles from Early product design');
+  await expect(btn).toBeDisabled();
+  await page.keyboard.press('Control+z');
+  expect((await data(page)).meetings[0].roles).toHaveLength(2);
+});
+
+test('Add process roles: with two processes a drop-down picks one or all', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    const d = window.orrery.example();
+    d.meetings.push({ id: 'mtg-sync', name: 'Launch sync', roles: [] });
+    d.processes[0].meetings.push('mtg-sync'); d.processes[1].meetings.push('mtg-sync');
+    window.orrery.load(d);
+    window.orrery.edit(true);
+    window.orrery.select('mtg-sync');
+  });
+  const btn = section(page, 'roles').locator('.sec-action');
+  await btn.click();
+  await expect(page.getByRole('menuitem')).toHaveCount(3);
+  await page.getByRole('menuitem', { name: /Product marketing announcement \(4 new\)/ }).click();
+  const got = () => data(page).then(d => d.meetings.find(m => m.id === 'mtg-sync').roles.map(l => l.role).sort());
+  expect(await got()).toEqual(['rol-engineering-manager', 'rol-market-analyst', 'rol-marketing-manager', 'rol-system-engineer']);
+  await btn.click();
+  await expect(page.getByRole('menuitem', { name: /Product marketing announcement \(0 new\)/ })).toBeDisabled();
+  await page.getByRole('menuitem', { name: /All processes \(4 new\)/ }).click();
+  expect(await got()).toHaveLength(8);
+  await expect(btn).toBeDisabled();
+});
+
+test('Add process roles is disabled for a meeting in no process', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    const d = window.orrery.example();
+    d.meetings.push({ id: 'mtg-free', name: 'Free meeting', roles: [] });
+    window.orrery.load(d);
+    window.orrery.edit(true);
+    window.orrery.select('mtg-free');
+  });
+  const btn = section(page, 'roles').locator('.sec-action');
+  await expect(btn).toBeDisabled();
+  await expect(btn).toHaveAttribute('title', /process first/);
+});

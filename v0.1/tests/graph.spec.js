@@ -133,3 +133,15 @@ test('legend hover highlights a department', async ({ page }) => {
   await expect(card(page, 'rol-market-analyst').locator('.body')).not.toHaveClass(/dim/);
   await expect(card(page, 'rol-system-engineer').locator('.body')).toHaveClass(/dim/);
 });
+
+test('the "more on hover" dot on RACI tags is not the brass "unsaved" colour', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => window.orrery.select('rol-system-engineer'));
+  const c = await page.evaluate(() => {
+    const el = document.querySelector('#detail .raci.has-note');
+    const probe = (v) => { const s = document.createElement('span'); s.style.color = `var(${v})`; document.body.append(s); const x = getComputedStyle(s).color; s.remove(); return x; };
+    return { dot: getComputedStyle(el, '::after').backgroundColor, info: probe('--info'), brass: probe('--brass') };
+  });
+  expect(c.dot).toBe(c.info);
+  expect(c.dot).not.toBe(c.brass);
+});

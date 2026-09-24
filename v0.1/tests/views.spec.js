@@ -131,3 +131,55 @@ test.describe('with motion', () => {
     await expect(page.locator('#stage g.card[data-kind="row"]')).toHaveCount(0);
   });
 });
+
+const dimmed = (loc) => loc.evaluateAll(els => els.map(e => e.querySelector('.body').classList.contains('dim')));
+
+test('tables: hovering a column header keeps that column lit and dims the others', async ({ page }) => {
+  await openApp(page);
+  for (const [view, colId, other] of [
+    ['process', 'pro-early-product-design', 'pro-product-marketing-announcement'],
+    ['role', 'rol-system-engineer', 'rol-scientist'],
+  ]) {
+    await page.evaluate((v) => window.orrery.setView(v), view);
+    await card(page, colId, 'header').hover();
+    expect(await dimmed(inCol(page, colId))).not.toContain(true);
+    expect(await dimmed(inCol(page, other))).not.toContain(false);
+    await page.mouse.move(5, 450);
+  }
+});
+
+test('tables: hovering a row lights its copies and every column header', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => window.orrery.setView('process'));
+  await page.locator('#stage g.card[data-col="pro-early-product-design"][data-id="rol-system-engineer"]').hover();
+  expect(await dimmed(page.locator('#stage g.card[data-id="rol-system-engineer"]'))).toEqual([false, false]);
+  expect(await dimmed(page.locator('#stage g.card[data-kind="header"]'))).toEqual([false, false]);
+  await expect(page.locator('#stage g.card[data-id="rol-scientist"] .body')).toHaveClass(/dim/);
+
+  await page.evaluate(() => window.orrery.setView('role'));
+  await page.locator('#stage g.card[data-col="rol-system-engineer"][data-id="pro-early-product-design"]').hover();
+  expect(await dimmed(page.locator('#stage g.card[data-kind="header"]'))).not.toContain(true);
+  await expect(page.locator('#stage g.card[data-col="rol-system-engineer"][data-id="doc-product-announcement"] .body')).toHaveClass(/dim/);
+});
+
+test('meeting table: hover rules, and chairs come first', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    const d = window.orrery.example();
+    d.meetings.push({ id: 'mtg-b', name: 'Second meeting', roles: [{ role: 'rol-scientist' }, { role: 'rol-market-analyst', chair: true }, { role: 'rol-system-engineer' }] });
+    window.orrery.load(d);
+    window.orrery.setView('meeting');
+  });
+  const order = (col) => inCol(page, col, '[data-kind="row"]').evaluateAll(els =>
+    els.map(e => ({ id: e.dataset.id, y: e.getBoundingClientRect().y })).sort((a, b) => a.y - b.y).map(x => x.id));
+  // System Engineer (Design) chairs, so it comes before the Research roles; Market analyst (Marketing) chairs mtg-b.
+  expect((await order('mtg-quarterly-design-review'))[0]).toBe('rol-system-engineer');
+  expect(await order('mtg-b')).toEqual(['rol-market-analyst', 'rol-scientist', 'rol-system-engineer']);
+
+  await card(page, 'mtg-b', 'header').hover();
+  expect(await dimmed(inCol(page, 'mtg-b'))).not.toContain(true);
+  expect(await dimmed(inCol(page, 'mtg-quarterly-design-review'))).not.toContain(false);
+  await page.locator('#stage g.card[data-col="mtg-b"][data-id="rol-scientist"]').hover();
+  expect(await dimmed(page.locator('#stage g.card[data-id="rol-scientist"]'))).toEqual([false, false]);
+  expect(await dimmed(page.locator('#stage g.card[data-kind="header"]'))).toEqual([false, false]);
+});
