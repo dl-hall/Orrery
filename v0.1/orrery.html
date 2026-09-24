@@ -131,6 +131,7 @@ input, textarea, select { font: inherit; color: inherit; }
 .card.selected .ring { opacity: 1; }
 .card.link-target .ring { opacity: 1; stroke-dasharray: 4 3; }
 .card.link-invalid { cursor: not-allowed; }
+.card.collapsed .shape { stroke: var(--bg); stroke-width: 1.5; }
 .headers rect { rx: 8px; }
 .headers text { fill: #FFFFFF; font: 600 13px var(--font-ui); letter-spacing: .02em; }
 .headers .unassigned { fill: var(--unassigned); }
@@ -227,6 +228,14 @@ button.swatch { cursor: pointer; }
 #legend .rm { opacity: 0; color: var(--muted); border-radius: 5px; width: 22px; height: 22px; display: grid; place-items: center; }
 #legend li:hover .rm { opacity: 1; }
 #legend .rm:hover { color: var(--danger); background: var(--hover); }
+#legend .eye { opacity: 0; color: var(--muted); border-radius: 5px; width: 22px; height: 22px; display: grid; place-items: center; flex: none; }
+#legend li:hover .eye, #legend .eye:focus-visible, #legend li.hidden-dept .eye { opacity: 1; }
+#legend .eye:hover { color: var(--ink); background: var(--hover); }
+#legend.not-graph .eye { opacity: 0 !important; }
+#legend.not-graph li:hover .eye, #legend.not-graph li.hidden-dept .eye, #legend.not-graph .eye:focus-visible { opacity: .45 !important; }
+body:not(.editing) #legend li[data-dept] { cursor: pointer; }
+#legend li.hidden-dept .name, #legend li.hidden-dept .count { color: var(--muted); }
+#legend li.hidden-dept .swatch { width: 10px; height: 10px; margin: 3px; border-radius: 50%; }
 #legend .add { margin-top: 4px; color: var(--muted); }
 #legend .empty-note { color: var(--muted); padding: 2px 6px 4px; font-size: 13px; }
 .palette { display: grid; grid-template-columns: repeat(5, 22px); gap: 6px; padding: 8px; }
@@ -456,6 +465,7 @@ body.editing #search.show ~ #focusbar { top: 88px; }
     <symbol id="i-open" viewBox="0 0 24 24"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></symbol>
     <symbol id="i-save" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></symbol>
     <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></symbol>
     <symbol id="i-back" viewBox="0 0 24 24"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></symbol>
     <symbol id="i-forward" viewBox="0 0 24 24"><path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/></symbol>
     <symbol id="i-undo" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
@@ -748,6 +758,7 @@ const S = {
   hoverKey: null,       // card key under pointer (tables have several cards per entity)
   focus: null,          // graph focus mode: role or process id, or null
   legendHover: null,    // department id, '__none', or null
+  hiddenDepts: new Set(), // department ids (or '__none') whose roles collapse to dots in the graph; view-only, not saved
   search: '',
 };
 let idx = null;         // derived index, rebuilt on every change
@@ -935,6 +946,8 @@ const typeOf = id => get(id)?.type || null;
 const itemOf = id => get(id)?.item || null;
 const deptOf = role => (role && role.department && idx.dept.get(role.department)) || null;
 const roleColour = role => deptOf(role)?.colour || null;
+/** Graph only: is this role's department collapsed to dots from the legend? */
+const isCollapsed = role => S.hiddenDepts.has(deptOf(role)?.id || '__none');
 const displayName = (item, type) => (item && item.name.trim()) || `Untitled ${TYPES[type || typeOf(item?.id)]?.label.toLowerCase() || 'item'}`;
 /** Departments in legend order, with a synthetic "Unassigned" when needed. */
 function deptOrder() {
@@ -1097,14 +1110,16 @@ const simNodes = new Map();
 let simStale = false;
 let structureSig = '';
 
-function nodeGeom(item, type) {
+const DOT = 18;   // diameter of a collapsed role
+function nodeGeom(item, type, collapsed = false) {
   const name = displayName(item, type);
   if (type === 'role') {
+    if (collapsed) return { lines: [], w: DOT, h: DOT, collapsed: true };
     const lines = wrap(name, 124, F.role, 2);
-    return { lines, w: Math.max(96, Math.ceil(maxLineW(lines, F.role)) + 28), h: lines.length * 16 + 18 };
+    return { lines, w: Math.max(96, Math.ceil(maxLineW(lines, F.role)) + 28), h: lines.length * 16 + 18, collapsed: false };
   }
   const lines = wrap(name, 150, F.proc, 2);
-  return { lines, w: Math.max(118, Math.ceil(maxLineW(lines, F.proc)) + 34), h: lines.length * 18 + 26 };
+  return { lines, w: Math.max(118, Math.ceil(maxLineW(lines, F.proc)) + 34), h: lines.length * 18 + 26, collapsed: false };
 }
 
 function rectCollide(pad) {
@@ -1189,7 +1204,7 @@ function syncSim() {
   const add = (item, type, i) => {
     let n = simNodes.get(item.id);
     if (!n) { n = { id: item.id, type, vx: 0, vy: 0 }; simNodes.set(item.id, n); place(n, item, type, i); }
-    Object.assign(n, nodeGeom(item, type));
+    Object.assign(n, nodeGeom(item, type, type === 'role' && isCollapsed(item)));
     n.dept = type === 'role' ? (deptOf(item)?.id || null) : null;
     const pin = d.layout[item.id];
     if (pin) { n.fx = pin.x; n.fy = pin.y; n.x = pin.x; n.y = pin.y; } else { n.fx = null; n.fy = null; }
@@ -1229,7 +1244,7 @@ function graphCards() {
   return sim.nodes().map(n => {
     const item = itemOf(n.id);
     const c = { key: n.id, id: n.id, type: n.type, kind: 'node', node: n, x: n.x, y: n.y, w: n.w, h: n.h, lines: n.lines, align: 'center', pinned: n.fx != null };
-    if (n.type === 'role') { c.fill = roleColour(item); c.font = F.role; c.lh = 16; }
+    if (n.type === 'role') { c.fill = roleColour(item); c.font = F.role; c.lh = 16; if (n.collapsed) { c.collapsed = true; c.tip = displayName(item, 'role'); } }
     else { c.font = F.proc; c.lh = 18; c.badges = { meeting: item.meetings.length, document: item.documents.length }; c.pad = -3; }
     return c;
   });
@@ -1245,7 +1260,10 @@ function focusLayout(id) {
   const around = typeOf(id) === 'role'
     ? idx.roleProcs.get(id).map(x => x.process).sort(byName).map(p => byId.get(p.id))
     : rolesSorted(itemOf(id).roles.map(l => l.role)).map(r => byId.get(r.id));
-  for (const c of cards) c.node = null;       // positions come from here, not the simulation
+  for (const c of cards) {
+    c.node = null;                            // positions come from here, not the simulation
+    if (c.collapsed) { Object.assign(c, nodeGeom(itemOf(c.id), c.type, false)); delete c.tip; }   // focus shows everyone in full
+  }
   centre.x = 0; centre.y = 0;
   const need = around.reduce((s, c) => s + c.w + 24, 0) / (2 * Math.PI);
   const r = Math.ceil(Math.max(220, need) / 220) * 220;
@@ -1365,11 +1383,11 @@ function rowCard(type, item, chips) {
 }
 
 /* ═══════════════════════════ Cards: drawing ═══════════════════════════ */
-function sigOf(c) { return JSON.stringify([c.type, c.kind, c.w, c.h, c.lines, c.fill, c.icon, c.chips, c.sub, c.badges, c.pinned, c.align, c.warn]); }
+function sigOf(c) { return JSON.stringify([c.type, c.kind, c.w, c.h, c.lines, c.fill, c.icon, c.chips, c.sub, c.badges, c.pinned, c.align, c.warn, c.collapsed, c.tip]); }
 function setBox(sel, w, h, pad, r) {
   return sel.attr('x', -w / 2 - pad).attr('y', -h / 2 - pad).attr('width', w + pad * 2).attr('height', h + pad * 2).attr('rx', r + pad);
 }
-function cornerRadius(c) { return c.type === 'role' ? 9 : c.type === 'process' ? 3 : 6; }
+function cornerRadius(c) { return c.collapsed ? c.w / 2 : c.type === 'role' ? 9 : c.type === 'process' ? 3 : 6; }
 
 function drawInner(g, c, t) {
   const el = g.node();
@@ -1377,19 +1395,26 @@ function drawInner(g, c, t) {
   if (el.__sig === sig) return;
   const old = el.__dims;
   el.__sig = sig;
-  el.__dims = { w: c.w, h: c.h };
+  el.__dims = { w: c.w, h: c.h, r: cornerRadius(c), collapsed: !!c.collapsed };
+  // Collapsing or expanding a department animates even outside a morph.
+  if (!t && old && old.collapsed !== !!c.collapsed && dur(1)) t = d3.transition().duration(dur(220)).ease(d3.easeCubicOut);
   g.selectAll('*').remove();
   const r = cornerRadius(c);
   const body = g.append('g').attr('class', 'body');
   const ring = body.append('rect').attr('class', 'ring');
   const shape = body.append('rect').attr('class', 'shape');
-  if (c.type === 'role') shape.attr('fill', c.fill || 'url(#hatch)');
+  if (c.type === 'role') {
+    if (c.fill || !c.collapsed) shape.attr('fill', c.fill || 'url(#hatch)');
+    else shape.style('fill', 'var(--unassigned)');   // an unassigned dot is solid too
+  }
   const grow = t && old && (old.w !== c.w || old.h !== c.h);
   if (grow) {
-    setBox(shape, old.w, old.h, 0, r); setBox(ring, old.w, old.h, 4, r);
+    const r0 = old.r ?? r;
+    setBox(shape, old.w, old.h, 0, r0); setBox(ring, old.w, old.h, 4, r0);
     shape.transition(t).call(s => setBox(s, c.w, c.h, 0, r));
     ring.transition(t).call(s => setBox(s, c.w, c.h, 4, r));
   } else { setBox(shape, c.w, c.h, 0, r); setBox(ring, c.w, c.h, 4, r); }
+  if (c.collapsed) { if (c.tip) body.attr('data-tip', c.tip); return; }   // a plain dot: no text, badges or marks
 
   const content = body.append('g').attr('class', 'content');
   if (grow) content.attr('opacity', 0).transition(t).attr('opacity', 1);
@@ -1472,7 +1497,7 @@ function renderStage({ morph = false } = {}) {
     .on('mouseleave', () => { S.hover = null; S.hoverKey = null; applyHighlight(); });
 
   const all = entered.merge(sel)
-    .attr('class', c => `card t-${c.type} k-${c.kind}`)
+    .attr('class', c => `card t-${c.type} k-${c.kind}` + (c.collapsed ? ' collapsed' : ''))
     .attr('data-kind', c => c.kind)
     .attr('data-type', c => c.type)
     .attr('data-key', c => c.key)
@@ -1552,12 +1577,17 @@ function clipToBox(cx, cy, w, h, dx, dy, margin = 2) {
   const t = Math.min(tx, ty);
   return [cx + dx * t, cy + dy * t];
 }
+function clipToCircle(cx, cy, r, dx, dy, margin = 2) {
+  const k = (r + margin) / Math.hypot(dx, dy);
+  return [cx + dx * k, cy + dy * k];
+}
 function placeEdge(el, l) {
   const a = l.source, b = l.target;
   const dx = b.x - a.x, dy = b.y - a.y;
   if (!dx && !dy) return;
-  const [x1, y1] = clipToBox(a.x, a.y, a.w, a.h, dx, dy);
-  const [x2, y2] = clipToBox(b.x, b.y, b.w, b.h, -dx, -dy);
+  const clip = (n, ddx, ddy) => (n.collapsed ? clipToCircle(n.x, n.y, n.w / 2, ddx, ddy) : clipToBox(n.x, n.y, n.w, n.h, ddx, ddy));
+  const [x1, y1] = clip(a, dx, dy);
+  const [x2, y2] = clip(b, -dx, -dy);
   el.setAttribute('x1', x1); el.setAttribute('y1', y1); el.setAttribute('x2', x2); el.setAttribute('y2', y2);
 }
 function positionGraph() {
@@ -1671,14 +1701,14 @@ function fit({ animate = true } = {}) {
 function zoomBy(f) { svg.transition('fit').duration(dur(200)).call(zoom.scaleBy, f); }
 
 /* ═══════════════════════════ Refresh cycle ═══════════════════════════ */
-function refresh({ morph = false } = {}) {
+function refresh({ morph = false, reheat = 0.08 } = {}) {
   idx = buildIndex(S.data);
   if (S.sel && !idx.byId.has(S.sel)) S.sel = null;
   if (S.focus && !idx.byId.has(S.focus)) S.focus = null;
   const before = sizeSig();
   const changed = syncSim();
   const resized = before !== sizeSig();
-  if (S.view === 'graph' && !S.focus) { if (changed) sim.alpha(0.35).restart(); else if (resized) sim.alpha(0.08).restart(); }
+  if (S.view === 'graph' && !S.focus) { if (changed) sim.alpha(0.35).restart(); else if (resized) sim.alpha(reheat).restart(); }
   else if (changed || resized) simStale = true;
   renderStage({ morph });
   renderLegend();
@@ -1689,6 +1719,11 @@ function refresh({ morph = false } = {}) {
   if (warnDlg.open) renderWarnings();
 }
 const sizeSig = () => sim.nodes().map(n => n.w + 'x' + n.h).join(',');
+/** Legend: collapse a department's roles to dots in the graph, or expand them again. A view setting, so no undo or dirty flag. */
+function toggleDeptHidden(id) {
+  if (!S.hiddenDepts.delete(id)) S.hiddenDepts.add(id);
+  refresh({ reheat: 0.3 });   // enough for neighbours to close in on (or make room around) the resized roles
+}
 
 /* ═══════════════════════════ Selection, views, history ═══════════════════════════ */
 function select(id, { push = true } = {}) {
@@ -2098,6 +2133,7 @@ function renderChrome() {
   $('#btn-warnings').title = nw ? `${nw} warning${nw === 1 ? '' : 's'} — list them (W)` : 'No warnings (W)';
   const view = VIEWS.find(v => v.id === S.view);
   $('#btn-view').title = `Change view — now: ${view.label}`;
+  $('#legend').classList.toggle('not-graph', S.view !== 'graph');   // collapsing departments only affects the graph
   const t = $('#doc-title');
   if (document.activeElement !== t) t.value = S.data.title;
   t.disabled = !S.edit;
@@ -2164,11 +2200,21 @@ function renderLegend() {
   for (const dep of rows) {
     const none = dep.id === '__none';
     const count = idx.deptRoles.get(dep.id).length;
+    const hidden = S.hiddenDepts.has(dep.id);
+    const label = none ? 'Unassigned' : (dep.name || 'Untitled department');
     const li = h('li', {
       'data-dept': dep.id,
+      class: hidden ? 'hidden-dept' : null,
       onmouseenter: () => { S.legendHover = dep.id; applyHighlight(); },
       onmouseleave: () => { S.legendHover = null; applyHighlight(); },
+      onclick: S.edit ? null : () => toggleDeptHidden(dep.id),
     });
+    const eye = h('button', {
+      class: 'eye', 'aria-pressed': String(hidden),
+      title: hidden ? 'Show roles in the graph' : 'Collapse roles to dots in the graph',
+      'aria-label': `${hidden ? 'Show' : 'Collapse'} ${label} roles in the graph`,
+      onclick: (e) => { e.stopPropagation(); toggleDeptHidden(dep.id); },
+    }, icon(hidden ? 'i-eye-off' : 'i-eye', 'ic sm'));
     const swatchStyle = none ? null : `background:${dep.colour}`;
     if (S.edit && !none) {
       li.append(h('button', { class: 'swatch', style: swatchStyle, title: 'Change colour', 'aria-label': `Change colour of ${dep.name || 'department'}`, onclick: (e) => showPalette(dep, e.currentTarget) }));
@@ -2177,12 +2223,14 @@ function renderLegend() {
         onchange: (e) => { const v = e.target.value.trim(); if (!v) { e.target.value = dep.name; return; } commit('rename department', d => { d.departments.find(x => x.id === dep.id).name = v; }); },
         onkeydown: (e) => { if (e.key === 'Enter') e.target.blur(); },
       }));
+      li.append(eye);
       li.append(h('span', { class: 'count', title: `${count} role${count === 1 ? '' : 's'}` }, String(count)));
       li.append(h('button', { class: 'rm', title: 'Delete department (its roles become unassigned)', 'aria-label': `Delete department ${dep.name}`,
         onclick: () => commit('delete department', d => { d.departments = d.departments.filter(x => x.id !== dep.id); for (const r of d.roles) if (r.department === dep.id) r.department = null; }) }, icon('i-x', 'ic sm')));
     } else {
       li.append(h('span', { class: 'swatch' + (none ? ' unassigned' : ''), style: swatchStyle }));
-      li.append(h('span', { class: 'name' }, none ? 'Unassigned' : (dep.name || 'Untitled department')));
+      li.append(h('span', { class: 'name' }, label));
+      li.append(eye);
       li.append(h('span', { class: 'count', title: `${count} role${count === 1 ? '' : 's'}` }, String(count)));
     }
     ul.append(li);
@@ -2623,7 +2671,7 @@ function loadData(json, meta = {}) {
   S.fileHandle = meta.handle || null;
   S.fileName = meta.name || null;
   S.undo = []; S.redo = [];
-  S.sel = null; S.hover = null; S.hoverKey = null; S.legendHover = null; S.focus = null;
+  S.sel = null; S.hover = null; S.hoverKey = null; S.legendHover = null; S.focus = null; S.hiddenDepts = new Set();
   setSearch('');
   simNodes.clear(); structureSig = ''; lastPos = new Map(); simStale = false;
   gCards.selectAll('g.card').remove();
@@ -2752,7 +2800,7 @@ window.orrery = {
   example: () => structuredClone(EXAMPLE),
   normalise: (json) => normalise(json),
   data: () => structuredClone(S.data),
-  state: () => ({ view: S.view, sel: S.sel, focus: S.focus, edit: S.edit, dirty: S.dirty, search: S.search, undo: S.undo.length, redo: S.redo.length, histIdx: S.histIdx, hist: S.hist.length, fileName: S.fileName, morphing, simAlpha: sim.alpha() }),
+  state: () => ({ view: S.view, sel: S.sel, focus: S.focus, edit: S.edit, hidden: [...S.hiddenDepts], dirty: S.dirty, search: S.search, undo: S.undo.length, redo: S.redo.length, histIdx: S.histIdx, hist: S.hist.length, fileName: S.fileName, morphing, simAlpha: sim.alpha() }),
   setView: (v) => setView(v),
   select: (id) => select(id),
   focus: (id) => setFocus(id),

@@ -38,6 +38,8 @@ In edit mode the right panel edits everything else:
 
 Each list has a search box to add existing items or create new ones. Departments can be renamed, recoloured or deleted in the legend.
 
+In the graph, click a department in the legend (or its eye button) to collapse its roles into small coloured dots; click again to expand them. This is a view setting only: it doesn't affect the table views and isn't saved to the file.
+
 ## Warnings
 
 | Warning | When |
