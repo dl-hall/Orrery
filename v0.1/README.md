@@ -19,7 +19,7 @@ Tip: `orrery.html?example` opens straight into the example.
 | Edit | Pencil or **E**. A brass *Edit mode* tab shows at the top while it's on. |
 | Pan and zoom | Drag empty space; mouse wheel. Zoom buttons appear near the bottom middle. **F** fits everything to the screen. |
 | Focus on a node | Double-click a role or process in the graph. It moves to the centre with only its direct connections around it. Double-click another node to move focus there. Leave with **Show full graph** in the bar at the top, **1**, *Graph* in the view menu, or Esc. |
-| Move a node | Drag it. It stays pinned (brass dot) until **Reset view** in the panel under the toolbar. |
+| Move a node | Drag it. It stays pinned (pin badge on its top-left corner). Right-click it and choose **Release position** to free it, or use **Reset view** in the panel under the toolbar to free every node. |
 | Search | Move the pointer to the top edge, or press Ctrl+F or **/**. Enter selects the first match. |
 | Add a role or process | Edit mode → right-click empty canvas |
 | Connect a role and a process | Edit mode → right-drag from one onto the other |
