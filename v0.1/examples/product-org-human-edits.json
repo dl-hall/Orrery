@@ -22,7 +22,7 @@
     {
       "id": "rol-research-manager",
       "name": "Research Manager",
-      "description": "Sets the research strategy and decides which early ideas are worth taking into product design.",
+      "description": "Sets the research strategy and decides which early ideas are worth taking into product design. Oversees a research group.",
       "department": "dep-research"
     },
     {
@@ -66,6 +66,12 @@
       "name": "Market analyst",
       "description": "Brings market data and customer insight into product decisions.",
       "department": "dep-marketing"
+    },
+    {
+      "id": "rol-2ngprd",
+      "name": "Project lead",
+      "description": "Design department project lead",
+      "department": "dep-design"
     }
   ],
   "processes": [
@@ -163,6 +169,52 @@
       "documents": [
         "doc-product-announcement"
       ]
+    },
+    {
+      "id": "pro-ns7cg7",
+      "name": "Prototype Development",
+      "description": "Design, develop, and test a prototype product",
+      "roles": [
+        {
+          "role": "rol-scientist",
+          "raci": [
+            "R"
+          ],
+          "note": "Responsible for prototype design"
+        },
+        {
+          "role": "rol-project-lead",
+          "raci": [
+            "A"
+          ],
+          "note": "Accountable for prototype being built"
+        },
+        {
+          "role": "rol-system-engineer",
+          "raci": [
+            "C"
+          ],
+          "note": "Consulted on prototype constraints"
+        },
+        {
+          "role": "rol-design-engineer",
+          "raci": [
+            "R"
+          ],
+          "note": "Responsible for prototype construction"
+        },
+        {
+          "role": "rol-2ngprd",
+          "raci": [],
+          "note": ""
+        }
+      ],
+      "meetings": [
+        "mtg-v19v7l"
+      ],
+      "documents": [
+        "doc-n1n8iv"
+      ]
     }
   ],
   "meetings": [
@@ -175,7 +227,7 @@
         {
           "role": "rol-system-engineer",
           "chair": true,
-          "mandatory": true
+          "mandatory": false
         },
         {
           "role": "rol-research-manager",
@@ -200,6 +252,29 @@
         {
           "role": "rol-design-engineer",
           "chair": false,
+          "mandatory": false
+        }
+      ]
+    },
+    {
+      "id": "mtg-v19v7l",
+      "name": "Product design meeting",
+      "description": "Weekly product design meeting",
+      "cadence": "weekly",
+      "roles": [
+        {
+          "role": "rol-scientist",
+          "chair": false,
+          "mandatory": false
+        },
+        {
+          "role": "rol-project-lead",
+          "chair": false,
+          "mandatory": false
+        },
+        {
+          "role": "rol-engineering-manager",
+          "chair": true,
           "mandatory": false
         }
       ]
@@ -239,6 +314,17 @@
       "reviewers": [
         "rol-market-analyst",
         "rol-system-engineer"
+      ]
+    },
+    {
+      "id": "doc-n1n8iv",
+      "name": "Product design document",
+      "description": "Design of the prototype",
+      "owners": [
+        "rol-design-engineer"
+      ],
+      "reviewers": [
+        "rol-scientist"
       ]
     }
   ],
