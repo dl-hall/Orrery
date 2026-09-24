@@ -1,0 +1,348 @@
+{
+  "orrery": "0.2",
+  "title": "Product organisation",
+  "departments": [
+    {
+      "id": "dep-research",
+      "name": "Research",
+      "colour": "#86397A"
+    },
+    {
+      "id": "dep-design",
+      "name": "Design",
+      "colour": "#2F5D8A"
+    },
+    {
+      "id": "dep-marketing",
+      "name": "Marketing",
+      "colour": "#3B7447"
+    }
+  ],
+  "roles": [
+    {
+      "id": "rol-research-manager",
+      "name": "Research Manager",
+      "description": "Sets the research strategy and decides which early ideas are worth taking into product design. Oversees a research group.",
+      "department": "dep-research"
+    },
+    {
+      "id": "rol-scientist",
+      "name": "Scientist",
+      "description": "Runs experiments and turns results into evidence the design team can build on.",
+      "department": "dep-research"
+    },
+    {
+      "id": "rol-project-lead",
+      "name": "Project lead",
+      "description": "Keeps research projects on schedule and makes sure findings reach the right people.",
+      "department": "dep-research"
+    },
+    {
+      "id": "rol-engineering-manager",
+      "name": "Engineering Manager",
+      "description": "Owns engineering capacity and signs off on what the team commits to deliver.",
+      "department": "dep-design"
+    },
+    {
+      "id": "rol-system-engineer",
+      "name": "System Engineer",
+      "description": "Holds the system view: requirements, interfaces and the trade-offs between them.",
+      "department": "dep-design"
+    },
+    {
+      "id": "rol-design-engineer",
+      "name": "Design Engineer",
+      "description": "Turns agreed requirements into detailed designs and prototypes.",
+      "department": "dep-design"
+    },
+    {
+      "id": "rol-marketing-manager",
+      "name": "Marketing manager",
+      "description": "Decides how and when new products are announced to customers.",
+      "department": "dep-marketing"
+    },
+    {
+      "id": "rol-market-analyst",
+      "name": "Market analyst",
+      "description": "Brings market data and customer insight into product decisions.",
+      "department": "dep-marketing"
+    },
+    {
+      "id": "rol-2ngprd",
+      "name": "Project lead",
+      "description": "Design department project lead",
+      "department": "dep-design"
+    }
+  ],
+  "processes": [
+    {
+      "id": "pro-early-product-design",
+      "name": "Early product design",
+      "description": "Takes a promising research result and shapes it into a product concept with a first technical feasibility assessment.",
+      "roles": [
+        {
+          "role": "rol-research-manager",
+          "raci": [
+            "R"
+          ],
+          "note": "Responsible for proposing research strategy"
+        },
+        {
+          "role": "rol-scientist",
+          "raci": [
+            "C"
+          ],
+          "note": ""
+        },
+        {
+          "role": "rol-project-lead",
+          "raci": [
+            "C"
+          ],
+          "note": ""
+        },
+        {
+          "role": "rol-engineering-manager",
+          "raci": [
+            "A"
+          ],
+          "note": ""
+        },
+        {
+          "role": "rol-system-engineer",
+          "raci": [
+            "R"
+          ],
+          "note": "Responsible for convening Quarterly product design review"
+        },
+        {
+          "role": "rol-design-engineer",
+          "raci": [
+            "I"
+          ],
+          "note": ""
+        }
+      ],
+      "meetings": [
+        "mtg-quarterly-design-review"
+      ],
+      "documents": [
+        "doc-product-initiation",
+        "doc-technical-feasibility"
+      ]
+    },
+    {
+      "id": "pro-product-marketing-announcement",
+      "name": "Product marketing announcement",
+      "description": "Prepares and releases the public announcement of a new product.",
+      "roles": [
+        {
+          "role": "rol-marketing-manager",
+          "raci": [
+            "A"
+          ],
+          "note": ""
+        },
+        {
+          "role": "rol-market-analyst",
+          "raci": [
+            "R"
+          ],
+          "note": ""
+        },
+        {
+          "role": "rol-system-engineer",
+          "raci": [
+            "C"
+          ],
+          "note": "Checks technical claims in the announcement"
+        },
+        {
+          "role": "rol-engineering-manager",
+          "raci": [
+            "I"
+          ],
+          "note": ""
+        }
+      ],
+      "meetings": [],
+      "documents": [
+        "doc-product-announcement"
+      ]
+    },
+    {
+      "id": "pro-ns7cg7",
+      "name": "Prototype Development",
+      "description": "Design, develop, and test a prototype product",
+      "roles": [
+        {
+          "role": "rol-scientist",
+          "raci": [
+            "R"
+          ],
+          "note": "Responsible for prototype design"
+        },
+        {
+          "role": "rol-project-lead",
+          "raci": [
+            "A"
+          ],
+          "note": "Accountable for prototype being built"
+        },
+        {
+          "role": "rol-system-engineer",
+          "raci": [
+            "C"
+          ],
+          "note": "Consulted on prototype constraints"
+        },
+        {
+          "role": "rol-design-engineer",
+          "raci": [
+            "R"
+          ],
+          "note": "Responsible for prototype construction"
+        },
+        {
+          "role": "rol-2ngprd",
+          "raci": [],
+          "note": ""
+        }
+      ],
+      "meetings": [
+        "mtg-v19v7l"
+      ],
+      "documents": [
+        "doc-n1n8iv"
+      ]
+    }
+  ],
+  "meetings": [
+    {
+      "id": "mtg-quarterly-design-review",
+      "name": "Quarterly product design review",
+      "description": "Reviews the concepts in early design and decides which move forward.",
+      "cadence": "quarterly",
+      "roles": [
+        {
+          "role": "rol-system-engineer",
+          "chair": true,
+          "mandatory": false
+        },
+        {
+          "role": "rol-research-manager",
+          "chair": false,
+          "mandatory": true
+        },
+        {
+          "role": "rol-scientist",
+          "chair": false,
+          "mandatory": false
+        },
+        {
+          "role": "rol-project-lead",
+          "chair": false,
+          "mandatory": false
+        },
+        {
+          "role": "rol-engineering-manager",
+          "chair": false,
+          "mandatory": true
+        },
+        {
+          "role": "rol-design-engineer",
+          "chair": false,
+          "mandatory": false
+        }
+      ]
+    },
+    {
+      "id": "mtg-v19v7l",
+      "name": "Product design meeting",
+      "description": "Weekly product design meeting",
+      "cadence": "weekly",
+      "roles": [
+        {
+          "role": "rol-scientist",
+          "chair": false,
+          "mandatory": false
+        },
+        {
+          "role": "rol-project-lead",
+          "chair": false,
+          "mandatory": false
+        },
+        {
+          "role": "rol-engineering-manager",
+          "chair": true,
+          "mandatory": false
+        }
+      ]
+    }
+  ],
+  "documents": [
+    {
+      "id": "doc-product-initiation",
+      "name": "Product initiation document",
+      "description": "Describes the concept, the customer need and the case for starting design work.",
+      "owners": [
+        "rol-system-engineer"
+      ],
+      "reviewers": [
+        "rol-research-manager",
+        "rol-engineering-manager"
+      ]
+    },
+    {
+      "id": "doc-technical-feasibility",
+      "name": "Technical feasibility document",
+      "description": "Assesses whether the concept can be built, and at what risk.",
+      "owners": [
+        "rol-design-engineer"
+      ],
+      "reviewers": [
+        "rol-system-engineer"
+      ]
+    },
+    {
+      "id": "doc-product-announcement",
+      "name": "Product announcement",
+      "description": "The public announcement text and its supporting material.",
+      "owners": [
+        "rol-marketing-manager"
+      ],
+      "reviewers": [
+        "rol-market-analyst",
+        "rol-system-engineer"
+      ]
+    },
+    {
+      "id": "doc-n1n8iv",
+      "name": "Product design document",
+      "description": "Design of the prototype",
+      "owners": [
+        "rol-design-engineer"
+      ],
+      "reviewers": [
+        "rol-scientist"
+      ]
+    }
+  ],
+  "flows": [
+    {
+      "id": "flo-uxh8tw",
+      "from": "pro-early-product-design",
+      "to": "pro-ns7cg7",
+      "description": "Provides product constraints",
+      "documents": [
+        "doc-technical-feasibility"
+      ]
+    }
+  ],
+  "layout": {
+    "pro-ns7cg7": {
+      "x": 221,
+      "y": -342
+    }
+  }
+}
