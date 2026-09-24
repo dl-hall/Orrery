@@ -6,6 +6,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8765", "--directory", "v0.1"],
       "port": 8765
+    },
+    {
+      "name": "orrery-v0.2",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8766", "--directory", "v0.2"],
+      "port": 8766
     }
   ]
 }
