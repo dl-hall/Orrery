@@ -340,10 +340,15 @@ button.tag:disabled { cursor: default; }
   display: flex; align-items: center; gap: 10px; padding: 8px 12px;
   background: var(--surface); border: 1px solid var(--rule); border-radius: 999px; box-shadow: var(--shadow);
   transform: translateY(-72px); opacity: 0;
-  transition: transform var(--panel-t) var(--ease-out), opacity var(--panel-t) ease;
+  transition: transform var(--panel-t) var(--ease-out), opacity var(--panel-t) ease, top var(--panel-t) var(--ease-out);
 }
 body.editing #search { top: 34px; }
 #search.show { transform: none; opacity: 1; }
+/* In focus mode the search drops in beneath the focus bar, so the bar never moves under the pointer. */
+body.focusing #search { top: 64px; z-index: 17; transform: translateY(-10px); }
+body.focusing #search:not(.show) { pointer-events: none; }
+body.editing.focusing #search { top: 84px; }
+body.focusing #search.show { transform: none; }
 #search input { flex: 1; border: 0; background: transparent; outline: none; min-width: 0; }
 #search .count { color: var(--muted); font: 500 11.5px var(--font-mono); white-space: nowrap; }
 #search .ic { color: var(--muted); }
@@ -443,8 +448,6 @@ body.hide-warn .warn { display: none; }
 }
 #focusbar[hidden] { display: none; }
 body.editing #focusbar { top: 34px; }
-#search.show ~ #focusbar { top: 68px; }
-body.editing #search.show ~ #focusbar { top: 88px; }
 #focusbar .eyebrow { font-size: 16px; }
 #focusbar .fname { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #focusbar button { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; background: var(--ink); color: var(--bg); font-weight: 600; font-size: 13px; white-space: nowrap; transition: background var(--fast) ease, transform var(--fast) var(--ease-out); }
@@ -1772,6 +1775,7 @@ function renderFocusBar() {
   const bar = $('#focusbar');
   const on = S.view === 'graph' && !!S.focus && !!get(S.focus);
   bar.hidden = !on;
+  document.body.classList.toggle('focusing', on);
   if (on) $('.fname', bar).textContent = displayName(itemOf(S.focus));
 }
 function pushHist() {
@@ -2021,7 +2025,12 @@ function updateReveal() {
   const W = window.innerWidth, H = window.innerHeight;
   const showing = searchEl.classList.contains('show');
   const band = x > W * 0.22 && x < W * 0.78;
-  const near = band && y >= 0 && y < (showing ? 120 : 60);
+  // Pointing at the focus bar doesn't open search (it would crowd the exit button), but doesn't close it either.
+  const fb = $('#focusbar');
+  const r = fb.hidden ? null : fb.getBoundingClientRect();
+  const overBar = !!r && x >= r.left - 6 && x <= r.right + 6 && y >= r.top - 6 && y <= r.bottom + 6;
+  const keep = showing ? Math.max(120, searchEl.getBoundingClientRect().bottom + 24) : 60;
+  const near = band && y >= 0 && y < keep && !(overBar && !showing);
   searchEl.classList.toggle('show', near || searchPinned || document.activeElement === searchInput || !!S.search);
   const zc = $('#zoomctl');
   const zShowing = zc.classList.contains('show');
