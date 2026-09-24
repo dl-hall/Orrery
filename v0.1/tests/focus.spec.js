@@ -97,3 +97,31 @@ test('switching to a table clears focus', async ({ page }) => {
   await page.keyboard.press('1');
   await expectFull(page);
 });
+
+test('the focus bar stays put while search reveals beneath it', async ({ page }) => {
+  await openApp(page);
+  await focusSE(page);
+  const bar = page.locator('#focusbar'), search = page.locator('#search');
+  const b0 = await bar.boundingBox();
+  // Pointing at the bar doesn't open search.
+  await page.mouse.move(b0.x + b0.width / 2, b0.y + b0.height / 2);
+  await expect(search).not.toHaveClass(/show/);
+  // Hovering the top edge beside it does, below the bar, which doesn't move.
+  await page.mouse.move(400, 20);
+  await expect(search).toHaveClass(/show/);
+  expect(await bar.boundingBox()).toEqual(b0);
+  expect((await search.boundingBox()).y).toBeGreaterThanOrEqual(b0.y + b0.height);
+  await page.click('#btn-unfocus');
+  await expectFull(page);
+});
+
+test('Ctrl+F in focus mode opens search below the focus bar', async ({ page }) => {
+  await openApp(page);
+  await focusSE(page);
+  const b0 = await page.locator('#focusbar').boundingBox();
+  await page.keyboard.press('Control+f');
+  await expect(page.locator('#search-input')).toBeFocused();
+  await expect(page.locator('#search')).toHaveClass(/show/);
+  expect(await page.locator('#focusbar').boundingBox()).toEqual(b0);
+  expect((await page.locator('#search').boundingBox()).y).toBeGreaterThanOrEqual(b0.y + b0.height);
+});
