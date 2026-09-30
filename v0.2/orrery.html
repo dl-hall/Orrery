@@ -351,6 +351,38 @@ button.tag:disabled { cursor: default; }
 .carries .carry-add:hover { color: var(--ink); border-color: var(--ink); }
 .carries .carry-add .ic { width: 13px; height: 13px; }
 .rm-link.rev:disabled { opacity: .35; cursor: default; background: none; color: var(--muted); }
+/* Notes (editable in any mode) and links */
+#detail textarea.notes { display: block; width: calc(100% + 9px); min-height: 34px; margin-left: -9px; resize: vertical; border: 1px solid transparent; border-radius: 8px; padding: 6px 9px; background: transparent; line-height: 1.45; transition: border-color var(--fast) ease; }
+#detail textarea.notes:hover { border-color: var(--rule-strong); border-style: dashed; }
+#detail textarea.notes:focus { border-style: solid; border-color: var(--brass); background: var(--bg); outline: none; }
+body:not(.editing) #detail textarea.notes:not(:focus) { resize: none; }
+#detail textarea.notes::placeholder { color: var(--muted); }
+body.editing #detail textarea.notes { width: 100%; margin-left: 0; border: 1px dashed var(--rule-strong); }
+body.editing #detail textarea.notes:focus { border-style: solid; border-color: var(--brass); }
+.link-row { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.link-row .link { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; padding: 4px 8px; margin-left: -8px; border-radius: 7px; color: inherit; text-decoration: none; }
+.link-row a.link:hover { background: var(--hover); }
+.link-row a.link:hover .nm { text-decoration: underline; text-underline-offset: 2px; }
+.link-row .link > .ic { width: 16px; height: 16px; color: var(--muted); flex: none; }
+.link-row .lbl { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+.link-row .nm { font-weight: 500; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-row .host { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-row .link.dead { cursor: default; }
+.link-row .link.dead .nm { color: var(--muted); }
+.link-row .tags { margin-left: 0; }
+.rm-link.edit:hover { color: var(--ink); }
+.link-add { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; min-height: 26px; margin-top: 4px; border-radius: 6px; border: 1px dashed var(--rule-strong); color: var(--muted); font-size: 12.5px; }
+.link-add:hover { color: var(--ink); border-color: var(--ink); }
+.link-add .ic { width: 13px; height: 13px; }
+.menu-form { width: 300px; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.menu-form label { display: flex; flex-direction: column; gap: 3px; }
+.menu-form label > span { font: 500 10.5px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.menu-form input { width: 100%; border: 1px solid var(--rule-strong); border-radius: 7px; padding: 6px 9px; background: var(--bg); }
+.menu-form input:focus { border-color: var(--brass); outline: none; }
+.menu-form .msg { font-size: 12px; color: var(--muted); line-height: 1.35; min-height: 2.7em; }
+.menu-form .msg.bad { color: var(--danger); }
+.menu-form .actions { display: flex; justify-content: flex-end; gap: 6px; }
+.menu .menu-form .btn { display: inline-flex; width: auto; padding: 6px 12px; font-size: 13px; }
 
 /* Search-to-find */
 .finder { position: relative; margin-top: 6px; }
@@ -536,6 +568,8 @@ body.editing #focusbar { top: 34px; }
     <symbol id="i-flow-in" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/></symbol>
     <symbol id="i-flow-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></symbol>
     <symbol id="i-swap" viewBox="0 0 24 24"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M15 3v4a2 2 0 0 0 2 2h4"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
     <pattern id="hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><rect width="6" height="6" style="fill: var(--unassigned)"/><rect width="2.2" height="6" style="fill: rgba(255,255,255,.2)"/></pattern>
   </defs>
@@ -734,7 +768,9 @@ const EXAMPLE = {
         { "role": "rol-design-engineer", "raci": ["I"], "note": "" }
       ],
       "meetings": ["mtg-quarterly-design-review"],
-      "documents": ["doc-product-initiation", "doc-technical-feasibility"]
+      "documents": ["doc-product-initiation", "doc-technical-feasibility"],
+      "notes": "More information can be found in the Early design playbook.",
+      "links": [{ "label": "Early design playbook", "url": "https://contoso.sharepoint.com/sites/product/Shared%20Documents/Early%20design%20playbook.pptx" }]
     },
     {
       "id": "pro-product-marketing-announcement",
@@ -770,7 +806,8 @@ const EXAMPLE = {
     { "id": "doc-product-initiation", "name": "Product initiation document", "description": "Describes the concept, the customer need and the case for starting design work.", "owners": ["rol-system-engineer"], "reviewers": ["rol-research-manager", "rol-engineering-manager"] },
     { "id": "doc-technical-feasibility", "name": "Technical feasibility document", "description": "Assesses whether the concept can be built, and at what risk.", "owners": ["rol-design-engineer"], "reviewers": ["rol-system-engineer"] },
     { "id": "doc-product-announcement", "name": "Product announcement", "description": "The public announcement text and its supporting material.", "owners": ["rol-marketing-manager"], "reviewers": ["rol-market-analyst", "rol-system-engineer"] },
-    { "id": "doc-product-roadmap", "name": "Product roadmap", "description": "Priorities and target dates for the coming year.", "owners": ["rol-market-analyst"], "reviewers": ["rol-research-manager"] },
+    { "id": "doc-product-roadmap", "name": "Product roadmap", "description": "Priorities and target dates for the coming year.", "owners": ["rol-market-analyst"], "reviewers": ["rol-research-manager"],
+      "links": [{ "label": "", "url": "https://contoso.sharepoint.com/sites/product/Shared%20Documents/Product%20roadmap%202027.xlsx" }] },
     { "id": "doc-design-roadmap", "name": "Design roadmap", "description": "The design function's plan, capacity and delivery risks.", "owners": ["rol-engineering-manager"], "reviewers": ["rol-system-engineer"] }
   ],
   "flows": [
@@ -855,6 +892,18 @@ function normalise(input) {
   const list = (v) => (Array.isArray(v) ? v.filter(isObj) : []);
   const d = { ...src, orrery: FORMAT, title: str(src.title).trim() || 'Untitled organisation' };
 
+  // Notes and links, common to every item that opens in the panel. A bare string is a link with no label.
+  const linkList = (arr) => {
+    const out = [];
+    for (const r of Array.isArray(arr) ? arr : []) {
+      const l = isObj(r) ? r : { url: r };
+      const url = str(l.url).trim();
+      if (!url) { dropped++; continue; }
+      out.push({ ...l, label: str(l.label).trim(), url });
+    }
+    return out;
+  };
+  const common = (x) => ({ notes: str(x.notes), links: linkList(x.links) });
   const usedColours = new Set();
   d.departments = list(src.departments).map(x => {
     const colour = /^#[0-9a-f]{6}$/i.test(str(x.colour)) ? x.colour.toUpperCase() : null;
@@ -867,7 +916,7 @@ function normalise(input) {
   d.roles = list(src.roles).map(x => {
     let department = x.department == null || x.department === '' ? null : str(x.department);
     if (department && !depIds.has(department)) { dropped++; department = null; }
-    return { ...x, id: uid(x.id, 'rol'), name: str(x.name), description: str(x.description), department };
+    return { ...x, id: uid(x.id, 'rol'), name: str(x.name), description: str(x.description), department, ...common(x) };
   });
   const roleIds = new Set(d.roles.map(x => x.id));
   const rawProcesses = list(src.processes).map(x => ({ ...x, id: uid(x.id, 'pro') }));
@@ -899,7 +948,7 @@ function normalise(input) {
   };
 
   d.processes = rawProcesses.map(x => ({
-    ...x, name: str(x.name), description: str(x.description),
+    ...x, name: str(x.name), description: str(x.description), ...common(x),
     roles: roleLinks(x.roles, l => ({
       ...l,
       raci: RACI.filter(k => (Array.isArray(l.raci) ? l.raci : str(l.raci).split('')).map(v => str(v).toUpperCase()).includes(k)),
@@ -909,12 +958,12 @@ function normalise(input) {
     documents: refList(x.documents, docIds),
   }));
   d.meetings = rawMeetings.map(x => ({
-    ...x, name: str(x.name), description: str(x.description),
+    ...x, name: str(x.name), description: str(x.description), ...common(x),
     cadence: CADENCES.includes(str(x.cadence).toLowerCase()) ? str(x.cadence).toLowerCase() : null,
     roles: roleLinks(x.roles, l => ({ ...l, chair: !!l.chair, mandatory: !!l.mandatory })),
   }));
   d.documents = rawDocs.map(x => ({
-    ...x, name: str(x.name), description: str(x.description),
+    ...x, name: str(x.name), description: str(x.description), ...common(x),
     owners: refList(x.owners, roleIds), reviewers: refList(x.reviewers, roleIds),
   }));
   // A role can't both own and review in the model we show; keep owner if both.
@@ -1128,7 +1177,7 @@ function setDirty(v) {
 // ── Model operations (called inside commit) ──
 function createItem(d, type, props = {}) {
   const t = TYPES[type];
-  const base = { id: newId(t.prefix), name: '', description: '' };
+  const base = { id: newId(t.prefix), name: '', description: '', notes: '', links: [] };
   const item =
     type === 'role' ? { ...base, department: null, ...props } :
     type === 'process' ? { ...base, roles: [], meetings: [], documents: [], ...props } :
@@ -1224,6 +1273,39 @@ const SENTENCE_END = /(?<!\b(?:[Ee]\.g|[Ii]\.e|vs|cf|approx|incl|Dr|Mr|Mrs|Ms|St
 function firstSentence(s) { const t = str(s).trim(); const i = t.search(SENTENCE_END); return (i < 0 ? t : t.slice(0, i)).trim(); }
 /** A process's one-line gloss: its description's first sentence, unless that just repeats the name. */
 function procBlurb(p) { const s = firstSentence(p.description); return s && s.toLowerCase() !== str(p.name).trim().toLowerCase() ? s : ''; }
+
+/* ── Links ── */
+const WEB_SCHEMES = ['http:', 'https:', 'mailto:'];
+/** Tidy a typed URL: "contoso.sharepoint.com/x.pptx" gets https://. Anything else is left as typed. */
+function cleanUrl(raw) {
+  const u = str(raw).trim();
+  if (!u || /^[a-z][a-z0-9+-]+:/i.test(u)) return u;   // has a scheme (a lone drive letter like C: doesn't count)
+  if (u.startsWith('//')) return 'https:' + u;
+  if (/^[^\s@\/]+@[^\s@\/]+\.[a-z]{2,}$/i.test(u)) return 'mailto:' + u;
+  return /^[^\s\/\\]+\.[a-z]{2,}(?:[\/?#:]|$)/i.test(u) ? 'https://' + u : u;
+}
+/** The parsed URL if it's safe to open (http, https or mailto); otherwise null. */
+function webUrl(url) {
+  try { const u = new URL(str(url).trim()); return WEB_SCHEMES.includes(u.protocol) ? u : null; } catch (e) { return null; }
+}
+const linkHref = url => webUrl(url)?.href || null;
+const decode = s => { try { return decodeURIComponent(s); } catch (e) { return s; } };
+/** The file named at the end of a web URL's path ("Org%20support.pptx" → "Org support.pptx"), or ''. */
+function linkFile(url) {
+  const u = webUrl(url);
+  if (!u || u.protocol === 'mailto:') return '';
+  const name = decode(u.pathname.split('/').filter(Boolean).pop() || '');
+  return /\.[a-z0-9]{1,8}$/i.test(name) ? name : '';
+}
+/** Where a link goes, in brief: the host, or the address for mailto. '' when it isn't a web link. */
+function linkHost(url) {
+  const u = webUrl(url);
+  return !u ? '' : u.protocol === 'mailto:' ? decode(u.pathname) : u.hostname;
+}
+/** What a link shows as: its label, else the file it points to, else where it goes, else the text as typed. */
+function linkName(link) {
+  return str(link.label).trim() || linkFile(link.url) || linkHost(link.url) || str(link.url).trim();
+}
 /** Wrap a gloss for a card; tip is the full sentence when the lines had to cut it short. */
 function wrapBlurb(blurb, maxW, maxLines) {
   const desc = wrap(blurb, maxW, F.desc, maxLines);
@@ -1897,7 +1979,8 @@ function searchMatches(q) {
   q = q.trim().toLowerCase();
   const m = new Set();
   if (!q) return m;
-  const hit = x => x.name.toLowerCase().includes(q) || x.description.toLowerCase().includes(q);
+  const has = s => s.toLowerCase().includes(q);
+  const hit = x => has(x.name) || has(x.description) || has(x.notes) || x.links.some(l => has(l.label));
   for (const r of S.data.roles) if (hit(r) || (deptOf(r)?.name || '').toLowerCase().includes(q)) m.add(r.id);
   for (const p of S.data.processes) if (hit(p)) m.add(p.id);
   for (const x of [...S.data.meetings, ...S.data.documents]) if (hit(x)) {
@@ -2101,7 +2184,9 @@ function goHist(delta) {
 }
 function toggleEdit(on = !S.edit) {
   if (on === S.edit) return;
-  if (!on && document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); // commit pending field edits first
+  // Commit pending field edits first (notes can be mid-edit in either mode).
+  const active = document.activeElement;
+  if (active && active !== document.body && (!on || active.closest('#detail'))) active.blur();
   S.edit = on;
   document.body.classList.toggle('editing', on);
   hideMenu();
@@ -2327,6 +2412,7 @@ function hideMenu() {
   if (menuReturnFocus) { menuReturnFocus.focus({ preventScroll: true }); menuReturnFocus = null; }
 }
 menuEl.addEventListener('keydown', (e) => {
+  if (e.target.closest('.menu-form')) return;   // a form in the menu: Tab and arrows work as usual
   const btns = $$('button:enabled', menuEl);
   const i = btns.indexOf(document.activeElement);
   if (e.key === 'ArrowDown') { e.preventDefault(); btns[(i + 1) % btns.length]?.focus(); }
@@ -2656,6 +2742,7 @@ function renderPanel() {
   if (type === 'process') body.append(...processSections(item));
   if (type === 'meeting') body.append(...meetingSections(item));
   if (type === 'document') body.append(...documentSections(item));
+  body.append(notesSection(type, id, item), linksSection(type, id, item));
   if (S.edit) body.append(h('div', { class: 'foot' }, h('button', { class: 'delete', onclick: () => deleteEntity(id) }, icon('i-trash', 'ic sm'), `Delete ${TYPES[type].label.toLowerCase()}`)));
 
   root.replaceChildren(head, body);
@@ -2697,6 +2784,77 @@ function section(key, iconId, title, ...kids) {
   return h('section', { 'data-section': key }, h('div', { class: 'sec-head' }, icon(iconId), h('span', { class: 'eyebrow' }, title)), ...kids);
 }
 function emptyLine(text) { return h('div', { class: 'none' }, text); }
+
+/** Notes can be written in any mode, so people can jot things down in a meeting without turning on edit mode. */
+function notesSection(type, id, item) {
+  const ta = h('textarea', { class: 'notes', 'aria-label': 'Notes', placeholder: 'Add a note…', rows: 1,
+    onchange: (e) => commit('edit notes', d => { const x = findIn(d, type, id); if (x.notes === e.target.value) return false; x.notes = e.target.value; }, { allowOutsideEdit: true }),
+    oninput: (e) => autoGrow(e.target) });
+  ta.value = item.notes;
+  requestAnimationFrame(() => autoGrow(ta));
+  return section('notes', 'i-note', 'Notes', ta);
+}
+/** Links open in a new tab. Only edit mode can add, change or remove them. */
+function linksSection(type, id, item) {
+  const sec = section('links', 'i-link', 'Links');
+  if (!item.links.length && !S.edit) sec.append(emptyLine('No links yet.'));
+  item.links.forEach((l, i) => sec.append(linkItem(type, id, l, i)));
+  if (S.edit) sec.append(h('button', { class: 'link-add', title: 'Add a link', onclick: (e) => linkForm(type, id, null, e.currentTarget) }, icon('i-plus'), 'Link'));
+  return sec;
+}
+function linkItem(type, id, l, i) {
+  const href = linkHref(l.url), name = linkName(l), host = linkHost(l.url);
+  const inner = [icon('i-link'), h('span', { class: 'lbl' }, h('span', { class: 'nm' }, name),
+    href ? (host !== name ? h('span', { class: 'host' }, host) : null) : h('span', { class: 'host' }, 'Not a web link, so it can’t be opened here'))];
+  const main = href
+    ? h('a', { class: 'link', href, target: '_blank', rel: 'noopener noreferrer', title: l.url }, ...inner)
+    : h('span', { class: 'link dead', title: l.url }, ...inner);
+  return h('div', { class: 'link-row', 'data-link': i }, main,
+    S.edit ? h('div', { class: 'tags' },
+      h('button', { class: 'rm-link edit', title: 'Edit link', 'aria-label': `Edit link: ${name}`, onclick: (e) => linkForm(type, id, i, e.currentTarget) }, icon('i-pencil', 'ic sm')),
+      h('button', { class: 'rm-link', title: 'Remove link', 'aria-label': `Remove link: ${name}`,
+        onclick: () => commit('remove link', d => { findIn(d, type, id).links.splice(i, 1); }) }, icon('i-x', 'ic sm'))) : null);
+}
+/** Add a link (index null) or edit one, in a small form under the button that opened it. */
+function linkForm(type, id, index, anchor) {
+  const cur = index == null ? { url: '', label: '' } : itemOf(id).links[index];
+  const url = h('input', { type: 'text', name: 'url', value: cur.url, placeholder: 'https://…', 'aria-label': 'Link address', autocomplete: 'off', spellcheck: 'false' });
+  const label = h('input', { type: 'text', name: 'label', value: cur.label, placeholder: 'Optional', 'aria-label': 'Link label', autocomplete: 'off' });
+  const msg = h('div', { class: 'msg', role: 'status' });   // two lines tall, so the form keeps its size (and place) as the text changes
+  // A SharePoint sharing link (…/:p:/s/…) doesn't name its file, so suggest a label.
+  const hint = () => {
+    const u = cleanUrl(url.value);
+    msg.classList.remove('bad');
+    msg.textContent = linkHref(u) && !label.value.trim() && !linkFile(u) ? 'This address doesn’t name a file. A label will make it easier to recognise.' : 'Paste a web address, such as a SharePoint or OneDrive link.';
+  };
+  url.addEventListener('input', hint);
+  label.addEventListener('input', hint);
+  const form = h('form', { class: 'menu-form', 'aria-label': index == null ? 'Add a link' : 'Edit link',
+    onsubmit: (e) => {
+      e.preventDefault();
+      const u = cleanUrl(url.value);
+      if (!linkHref(u)) { msg.textContent = u ? 'Enter a web address, e.g. https://…' : 'Enter the link’s address.'; msg.classList.add('bad'); url.focus(); return; }
+      const link = { label: label.value.trim(), url: u };
+      hideMenu();
+      commit(index == null ? 'add link' : 'edit link', d => {
+        const x = findIn(d, type, id);
+        if (index == null) { x.links.push(link); return; }
+        const old = x.links[index];
+        if (old.url === link.url && old.label === link.label) return false;
+        x.links[index] = { ...old, ...link };
+      });
+    } },
+    h('label', null, h('span', null, 'Address'), url),
+    h('label', null, h('span', null, 'Label'), label),
+    msg,
+    h('div', { class: 'actions' },
+      h('button', { type: 'button', class: 'btn', onclick: () => hideMenu() }, 'Cancel'),
+      h('button', { type: 'submit', class: 'btn primary' }, index == null ? 'Add link' : 'Save')));
+  const r = anchor.getBoundingClientRect();
+  hint();
+  showMenu(null, r.right - 300, r.bottom + 6, { content: form, returnFocus: anchor });
+  url.focus();
+}
 /** One linked-item row: hover chevron to go there, the item tile, then tags and an unlink button. */
 function linkRow(targetId, tags = [], onRemove = null, removeLabel = 'Remove', warn = null) {
   const t = typeOf(targetId), x = itemOf(targetId);
@@ -3253,7 +3411,7 @@ window.orrery = {
   focus: (id) => setFocus(id),
   warnings: () => idx.warn.list.map(w => ({ ...w })),
   edit: (on) => toggleEdit(on),
-  undo, redo, fit, resetView, firstSentence,
+  undo, redo, fit, resetView, firstSentence, cleanUrl, linkHref, linkName,
   settle: () => { sim.stop(); settle(); positionGraph(); },
   serialise,
 };
