@@ -2,7 +2,7 @@
 
 A single-file organisation and process navigator. Open `orrery.html` in Edge or Chrome, load a JSON file, and explore or edit roles, processes, meetings and documents live in a meeting.
 
-New in v0.2: **process flows**. One process can feed another: a product roadmap guides a design roadmap, and the design roadmap reports back. Roles still never connect to roles. No install or admin rights needed. It does need an internet connection to load d3 and the fonts.
+New in v0.2: **process flows**. One process can feed another: a product roadmap guides a design roadmap, and the design roadmap reports back. Roles still never connect to roles. Also new: **notes and links** on every role, process, meeting and document. No install or admin rights needed. It does need an internet connection to load d3 and the fonts.
 
 - `orrery.html`: the whole app.
 - `examples/product-org.json`: the example organisation (also built in, under **Load example**).
@@ -22,7 +22,7 @@ Tip: `orrery.html?example` opens straight into the example.
 | Pan and zoom | Drag empty space; mouse wheel. Zoom buttons appear near the bottom middle. **F** fits everything to the screen. |
 | Focus on a node | Double-click a role or process in the graph. It moves to the centre with only its direct connections around it. Double-click another node to move focus there. Leave with **Show full graph** in the bar at the top, **1**, *Graph* in the view menu, or Esc. |
 | Move a node | Drag it. It stays pinned (pin badge on its top-left corner). Right-click it and choose **Release position** to free it, or use **Reset view** in the panel under the toolbar to free every node. |
-| Search | Move the pointer to the top edge, or press Ctrl+F or **/**. Enter selects the first match. |
+| Search | Move the pointer to the top edge, or press Ctrl+F or **/**. Enter selects the first match. Search also looks in notes and link labels. |
 | Add a role or process | Edit mode → right-click empty canvas |
 | Connect a role and a process | Edit mode → right-drag from one onto the other |
 | Show that one process feeds another | Edit mode → right-drag from the process that gives to the one that receives. Or use *Add an input from…* / *Add an output to…* in the process's panel. |
@@ -31,6 +31,8 @@ Tip: `orrery.html?example` opens straight into the example.
 | Delete | Edit mode → right-click a node, press Delete, or use **Delete** in the panel. Undo brings it back. |
 | Check for mistakes | **Warnings** in the panel under the toolbar, or **W**, lists every discrepancy. Click an item to go to it. Yellow triangles mark the same problems in the right panel and on table cards. **Marks on/off** next to it hides the triangles. |
 | Fill a meeting from its processes | Edit mode → select the meeting → **Add process roles** beside *Roles*. If the meeting is in several processes, pick one or all from the drop-down. |
+| Write a note on an item | Select it and type in **Notes** at the bottom of the right panel. Works with edit mode on or off. |
+| Add a link to an item | Edit mode → select it → **+ Link** under **Links**. Paste the address (for example a SharePoint or OneDrive link) and give it a label. The pencil changes a link, the × removes it. |
 | Hide panels | Round arrow buttons on each panel. Panels remember whether they were hidden. |
 
 In edit mode the right panel edits everything else:
@@ -45,6 +47,15 @@ In edit mode the right panel edits everything else:
 Each list has a search box to add existing items or create new ones. Departments can be renamed, recoloured or deleted in the legend.
 
 A process shows the first sentence of its description under its name, in the graph (up to three lines) and the process table header (up to two), so a process isn't confused with a document of the same name. Hover to see the whole sentence when it's cut short. The same sentence appears under each process in the *Add to a process…* search box, and as a tooltip on process links in the right panel. The sentence ends at the first `.`, `!` or `?` that starts a new sentence, so `e.g.` and `Dr.` don't cut it short.
+
+## Notes and links
+
+Every role, process, meeting and document has **Notes** and **Links** at the bottom of the right panel.
+
+- **Notes** are free text. You can write them whether or not edit mode is on, so you can jot things down in a meeting. A note is saved when you click away. Undo works as usual, and the file shows as unsaved.
+- **Links** open in a new tab. Only edit mode can add, change or remove them. A link without a label shows the file name from its address (`Org%20support.pptx` shows as *Org support.pptx*), or the site's name if the address doesn't name a file. SharePoint sharing links (`…/:p:/s/…`) don't name their file, so give those a label.
+- If you type an address without `https://`, such as `contoso.sharepoint.com/…`, Orrery adds it. Only `http`, `https` and `mailto` addresses can be opened.
+- Cards in the graph and tables don't show notes or links.
 
 ## Process flows
 
@@ -79,7 +90,9 @@ In the meeting table, chairs are listed first.
   "orrery": "0.2",
   "title": "Product organisation",
   "departments": [{ "id": "dep-1", "name": "Design", "colour": "#2F5D8A" }],
-  "roles":       [{ "id": "rol-1", "name": "System Engineer", "description": "", "department": "dep-1" }],
+  "roles":       [{ "id": "rol-1", "name": "System Engineer", "description": "", "department": "dep-1",
+                    "notes": "More information can be found in the Org support file",
+                    "links": [{ "label": "Org support file", "url": "https://contoso.sharepoint.com/…/Org%20support.pptx" }] }],
   "processes":   [{ "id": "pro-1", "name": "Early product design", "description": "",
                     "roles": [{ "role": "rol-1", "raci": ["R"], "note": "" }],
                     "meetings": ["mtg-1"], "documents": ["doc-1"] }],
@@ -96,8 +109,9 @@ In the meeting table, chairs are listed first.
 - **`cadence`:** one of `yearly`, `bi-yearly`, `quarterly`, `monthly`, `fortnightly`, `weekly`, `bi-weekly`, `daily`, or `null` for not specified.
 - **Owner or reviewer:** a role owns a document or reviews it, not both. If a file lists a role as both, it's kept as the owner.
 - **`layout`:** holds only the nodes you've pinned by dragging.
+- **`notes` and `links`:** roles, processes, meetings and documents can all have them. A link can be written as just its address (`"https://…"`). A link with no address is dropped when the file opens, and counted in the message. A link to anything other than a web or email address (such as `C:\Shared\Org support.pptx`) is kept, but shows as text you can't click.
 - **`flows`:** each runs `from` one process `to` another. A two-way link is two flows. A flow from a process to itself, a second flow in the same direction, or a flow to a process that doesn't exist is dropped when the file opens, and counted in the message.
-- **v0.1 files** open as they are, with no flows. **v0.1 keeps flows** it doesn't understand when it saves a v0.2 file. But deleting a process in v0.1 can leave a flow pointing at it, and v0.2 drops that flow when it opens the file.
+- **v0.1 files** open as they are, with no flows, notes or links. **v0.1 keeps flows, notes and links** it doesn't understand when it saves a v0.2 file. But deleting a process in v0.1 can leave a flow pointing at it, and v0.2 drops that flow when it opens the file.
 
 ## Tests
 
@@ -115,5 +129,6 @@ The tests run on the installed Edge (`channel: 'msedge'`) and serve d3 from `nod
 - **Save in place:** only works in Edge and Chrome, because it relies on the File System Access API. Other browsers download a copy.
 - **Graph-only features:** connecting by right-drag and pinning only work in the graph view. The tables are for reading and selecting.
 - **Flows:** their descriptions aren't searchable, and a flow can't be selected on its own: edit it from either process's panel.
+- **Links:** only web (`http`/`https`) and email (`mailto`) links open. Paths to local or network files show as text, because browsers don't open them from a web page.
 - **Undo history:** isn't saved with the file, and moving nodes can't be undone (use Reset view instead).
 - **Screen size:** built for desktop and projector screens, not phones.

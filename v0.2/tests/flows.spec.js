@@ -188,9 +188,9 @@ test('the process panel lists what feeds it and what it feeds', async ({ page })
   await expect(section(page, 'feeds').locator('.sec-head')).toContainText('Feeds into');
   await expect(section(page, 'fed-by').locator('.flow-item')).toHaveCount(1);
   await expect(section(page, 'feeds').locator('.flow-item')).toHaveCount(2);
-  // Order: roles, fed by, feeds into, meetings, documents.
+  // Order: roles, fed by, feeds into, meetings, documents, then notes and links.
   const order = await page.locator('#detail .body > section').evaluateAll(s => s.map(x => x.dataset.section));
-  expect(order).toEqual(['description', 'roles', 'fed-by', 'feeds', 'meetings', 'documents']);
+  expect(order).toEqual(['description', 'roles', 'fed-by', 'feeds', 'meetings', 'documents', 'notes', 'links']);
   const dr = flowItem(page, 'feeds', DR);
   await expect(dr.locator('.tag')).toHaveText('Two-way');
   await expect(dr.locator('.note')).toHaveText('Priorities and target dates the design function plans against');

@@ -187,6 +187,13 @@
       "documents": [
         "doc-product-initiation",
         "doc-technical-feasibility"
+      ],
+      "notes": "More information can be found in the Early design playbook.",
+      "links": [
+        {
+          "label": "Early design playbook",
+          "url": "https://contoso.sharepoint.com/sites/product/Shared%20Documents/Early%20design%20playbook.pptx"
+        }
       ]
     },
     {
@@ -314,6 +321,12 @@
       ],
       "reviewers": [
         "rol-research-manager"
+      ],
+      "links": [
+        {
+          "label": "",
+          "url": "https://contoso.sharepoint.com/sites/product/Shared%20Documents/Product%20roadmap%202027.xlsx"
+        }
       ]
     },
     {

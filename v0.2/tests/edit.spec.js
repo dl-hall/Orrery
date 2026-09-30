@@ -8,8 +8,9 @@ const row = (page, key, id) => section(page, key).locator(`.row[data-id="${id}"]
 test('edits are blocked outside edit mode', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => window.orrery.select('pro-early-product-design'));
-  await expect(panel(page).locator('input, textarea, select')).toHaveCount(0);
-  await expect(panel(page).locator('.finder')).toHaveCount(0);
+  // Notes are the one field open in any mode.
+  await expect(panel(page).locator('input, textarea:not(.notes), select')).toHaveCount(0);
+  await expect(panel(page).locator('.finder, .link-add, .link-row button')).toHaveCount(0);
   await rightClick(page, await emptySpot(page));
   await expect(page.locator('#menu')).toBeHidden();
   await expect(page.locator('#edit-banner span')).toBeHidden();
