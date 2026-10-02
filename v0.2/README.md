@@ -122,6 +122,7 @@ cd v0.2/tests && npm install && npx playwright test
 The tests run on the installed Edge (`channel: 'msedge'`) and serve d3 from `node_modules`.
 - **Screenshots:** `node screenshots.js` writes the key screens, light and dark, to `tests/screenshots/`.
 - **Large fixture:** `node fixtures/make-large.js` regenerates the 150-role fixture.
+- **Focus spacing fixtures:** `node fixtures/make-focus-stress.js` regenerates the crowded focus-mode cases that `layout.spec.js` checks for overlapping cards.
 
 ## Known limits (v0.2)
 

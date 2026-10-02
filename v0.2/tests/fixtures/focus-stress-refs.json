@@ -1,0 +1,515 @@
+{
+  "orrery": "0.2",
+  "title": "Focus spacing stress test",
+  "departments": [
+    {
+      "id": "dep-ops",
+      "name": "Operations",
+      "colour": "#2F5D8A"
+    },
+    {
+      "id": "dep-fin",
+      "name": "Finance",
+      "colour": "#86397A"
+    },
+    {
+      "id": "dep-eng",
+      "name": "Engineering",
+      "colour": "#3B7447"
+    }
+  ],
+  "roles": [
+    {
+      "id": "rol-0",
+      "name": "Head of operations excellence",
+      "department": "dep-ops"
+    },
+    {
+      "id": "rol-1",
+      "name": "Senior procurement analyst",
+      "department": "dep-ops"
+    },
+    {
+      "id": "rol-2",
+      "name": "Finance business partner",
+      "department": "dep-fin"
+    },
+    {
+      "id": "rol-3",
+      "name": "Management accountant",
+      "department": "dep-fin"
+    },
+    {
+      "id": "rol-4",
+      "name": "Principal systems engineer",
+      "department": "dep-eng"
+    },
+    {
+      "id": "rol-5",
+      "name": "Quality assurance lead",
+      "department": "dep-eng"
+    }
+  ],
+  "processes": [
+    {
+      "id": "pro-centre",
+      "name": "Integrated business planning and review cycle",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [
+        {
+          "role": "rol-0",
+          "raci": [
+            "R"
+          ],
+          "note": ""
+        },
+        {
+          "role": "rol-1",
+          "raci": [
+            "R"
+          ],
+          "note": ""
+        },
+        {
+          "role": "rol-2",
+          "raci": [
+            "R"
+          ],
+          "note": ""
+        },
+        {
+          "role": "rol-3",
+          "raci": [
+            "R"
+          ],
+          "note": ""
+        },
+        {
+          "role": "rol-4",
+          "raci": [
+            "R"
+          ],
+          "note": ""
+        },
+        {
+          "role": "rol-5",
+          "raci": [
+            "R"
+          ],
+          "note": ""
+        }
+      ],
+      "meetings": [
+        "mtg-0",
+        "mtg-1"
+      ],
+      "documents": [
+        "doc-0",
+        "doc-1"
+      ]
+    },
+    {
+      "id": "pro-0",
+      "name": "Quarterly supplier performance review",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-1",
+      "name": "Regional demand forecasting and planning",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-2",
+      "name": "Customer onboarding and account set-up",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-3",
+      "name": "Annual budget consolidation and sign-off",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-4",
+      "name": "Product safety incident investigation",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-5",
+      "name": "Warehouse capacity and logistics planning",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-6",
+      "name": "Marketing campaign approval and launch",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-7",
+      "name": "Contract renewal and vendor negotiation",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-8",
+      "name": "Field service scheduling and dispatch",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-9",
+      "name": "Engineering change request evaluation",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-10",
+      "name": "Regulatory compliance audit preparation",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-11",
+      "name": "Talent acquisition and interview panels",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-12",
+      "name": "Data platform access request handling",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-13",
+      "name": "Pricing strategy review and approval",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-14",
+      "name": "Customer complaint escalation handling",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-15",
+      "name": "Inventory reconciliation and write-offs",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-16",
+      "name": "Brand guideline governance and review",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-17",
+      "name": "Capital expenditure request assessment",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-18",
+      "name": "Partner channel enablement programme",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-19",
+      "name": "Release readiness and go-live decision",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    }
+  ],
+  "meetings": [
+    {
+      "id": "mtg-0",
+      "name": "Monthly operations and finance steering committee",
+      "cadence": "monthly",
+      "roles": [
+        {
+          "role": "rol-0"
+        },
+        {
+          "role": "rol-1"
+        },
+        {
+          "role": "rol-2"
+        },
+        {
+          "role": "rol-3"
+        },
+        {
+          "role": "rol-4"
+        },
+        {
+          "role": "rol-5"
+        }
+      ]
+    },
+    {
+      "id": "mtg-1",
+      "name": "Weekly planning stand-up",
+      "cadence": "weekly",
+      "roles": [
+        {
+          "role": "rol-0"
+        },
+        {
+          "role": "rol-1"
+        },
+        {
+          "role": "rol-2"
+        }
+      ]
+    }
+  ],
+  "documents": [
+    {
+      "id": "doc-0",
+      "name": "Integrated business plan and assumptions register",
+      "owners": [
+        "rol-0"
+      ],
+      "reviewers": []
+    },
+    {
+      "id": "doc-1",
+      "name": "Planning calendar",
+      "owners": [
+        "rol-2"
+      ],
+      "reviewers": []
+    }
+  ],
+  "flows": [
+    {
+      "id": "flo-pro-0-pro-centre",
+      "from": "pro-0",
+      "to": "pro-centre",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-1-pro-centre",
+      "from": "pro-1",
+      "to": "pro-centre",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-2-pro-centre",
+      "from": "pro-2",
+      "to": "pro-centre",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-3-pro-centre",
+      "from": "pro-3",
+      "to": "pro-centre",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-4-pro-centre",
+      "from": "pro-4",
+      "to": "pro-centre",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-centre-pro-5",
+      "from": "pro-centre",
+      "to": "pro-5",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-centre-pro-6",
+      "from": "pro-centre",
+      "to": "pro-6",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-centre-pro-7",
+      "from": "pro-centre",
+      "to": "pro-7",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-centre-pro-8",
+      "from": "pro-centre",
+      "to": "pro-8",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-centre-pro-9",
+      "from": "pro-centre",
+      "to": "pro-9",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-10-pro-centre",
+      "from": "pro-10",
+      "to": "pro-centre",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-centre-pro-10",
+      "from": "pro-centre",
+      "to": "pro-10",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-11-pro-centre",
+      "from": "pro-11",
+      "to": "pro-centre",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-centre-pro-11",
+      "from": "pro-centre",
+      "to": "pro-11",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-12-pro-centre",
+      "from": "pro-12",
+      "to": "pro-centre",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-centre-pro-12",
+      "from": "pro-centre",
+      "to": "pro-12",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-13-pro-centre",
+      "from": "pro-13",
+      "to": "pro-centre",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-centre-pro-13",
+      "from": "pro-centre",
+      "to": "pro-13",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-14-pro-centre",
+      "from": "pro-14",
+      "to": "pro-centre",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-centre-pro-14",
+      "from": "pro-centre",
+      "to": "pro-14",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-15-pro-centre",
+      "from": "pro-15",
+      "to": "pro-centre",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-centre-pro-15",
+      "from": "pro-centre",
+      "to": "pro-15",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-16-pro-centre",
+      "from": "pro-16",
+      "to": "pro-centre",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-centre-pro-16",
+      "from": "pro-centre",
+      "to": "pro-16",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-17-pro-centre",
+      "from": "pro-17",
+      "to": "pro-centre",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-centre-pro-17",
+      "from": "pro-centre",
+      "to": "pro-17",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-18-pro-centre",
+      "from": "pro-18",
+      "to": "pro-centre",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-centre-pro-18",
+      "from": "pro-centre",
+      "to": "pro-18",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-19-pro-centre",
+      "from": "pro-19",
+      "to": "pro-centre",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-centre-pro-19",
+      "from": "pro-centre",
+      "to": "pro-19",
+      "description": ""
+    }
+  ]
+}
