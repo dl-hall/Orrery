@@ -150,6 +150,12 @@ input, textarea, select { font: inherit; color: inherit; }
 .card.flow-row .shape { stroke-dasharray: 5 3; stroke-width: 1.2; }
 .rubber { stroke: var(--brass); stroke-width: 2; stroke-dasharray: 6 5; fill: none; pointer-events: none; vector-effect: non-scaling-stroke; }
 .rubber.invalid { stroke: var(--danger); }
+.card .link-handle { opacity: 0; pointer-events: none; cursor: crosshair; transition: opacity var(--fast) ease; }
+body.editing:not(.focusing) .card.k-node:is(:hover, .selected) .link-handle { opacity: 1; pointer-events: all; }
+.card .link-handle .hit { fill: transparent; }
+.card .link-handle .knob { fill: var(--brass); stroke: var(--bg); stroke-width: 2; }
+.card .link-handle path { stroke: var(--surface); stroke-width: 1.8; stroke-linecap: round; fill: none; }
+body.connecting #stage, body.connecting #stage .card { cursor: crosshair; }
 /* SVG elements ignore the HTML hidden attribute, so honour it explicitly. */
 svg [hidden] { display: none; }
 
@@ -1329,8 +1335,11 @@ let currentHeaders = [];
 let lastPos = new Map();     // entity id -> {x, y} of its first card in the last rendered view
 let morphing = false;
 
+// d3's default filters, minus presses on a card's connector handle (that drag draws a connection instead).
+const offHandle = e => !(e.target.closest && e.target.closest('.link-handle'));
 const zoom = d3.zoom()
   .scaleExtent([0.12, 3])
+  .filter(e => (!e.ctrlKey || e.type === 'wheel') && !e.button && offHandle(e))
   .on('start', (e) => { if (e.sourceEvent && e.sourceEvent.type === 'mousedown') svg.classed('panning', true); })
   .on('zoom', (e) => world.attr('transform', e.transform))
   .on('end', () => svg.classed('panning', false));
@@ -1585,7 +1594,7 @@ function tableLayout(view) {
   }
   if (!cols.length) {
     const what = { process: 'processes', role: 'roles', meeting: 'meetings' }[view];
-    headers.push({ key: 'note', note: true, x: 0, y: 0, label: `No ${what} yet` + (S.edit && view !== 'meeting' ? ' — right-click in the graph to add one' : '') });
+    headers.push({ key: 'note', note: true, x: 0, y: 0, label: `No ${what} yet` + (S.edit && view !== 'meeting' ? ' — double-click or right-click in the graph to add one' : '') });
     return { cards, headers };
   }
   cols.forEach((col, ci) => {
@@ -1766,10 +1775,18 @@ function drawInner(g, c, t) {
   }
   if (c.pinned) {
     const pg = content.append('g').attr('class', 'pin')
-      .attr('data-tip', 'Pinned. Right-click → Release position, or Reset view to release all.')
+      .attr('data-tip', 'Pinned. Right-click (or two-finger tap) → Release position, or Reset view to release all.')
       .attr('transform', `translate(${-c.w / 2 + 3},${-c.h / 2 + 3})`);
     pg.append('circle').attr('r', 8.5);
     pg.append('use').attr('href', '#i-pin').attr('x', -5.5).attr('y', -5.5).attr('width', 11).attr('height', 11);
+  }
+  if (c.kind === 'node') {
+    // Connector handle (edit mode, on hover or selection): drag it to another card, or tap it and click one.
+    const hg = content.append('g').attr('class', 'link-handle').attr('transform', `translate(${c.w / 2},0)`)
+      .attr('data-tip', 'Drag to a role or process to connect, or click here and then click one.');
+    hg.append('circle').attr('class', 'hit').attr('r', 13);
+    hg.append('circle').attr('class', 'knob').attr('r', 7);
+    hg.append('path').attr('d', 'M-3.5,0H3.5M0,-3.5V3.5');
   }
 }
 
@@ -2084,6 +2101,7 @@ function zoomBy(f) { svg.transition('fit').duration(dur(200)).call(zoom.scaleBy,
 /* ═══════════════════════════ Refresh cycle ═══════════════════════════ */
 function refresh({ morph = false, reheat = 0.08 } = {}) {
   idx = buildIndex(S.data);
+  if (link && !idx.byId.has(link.src.id)) cancelLink();
   if (S.sel && !idx.byId.has(S.sel)) S.sel = null;
   if (S.focus && !idx.byId.has(S.focus)) S.focus = null;
   const before = sizeSig();
@@ -2126,6 +2144,7 @@ function select(id, { push = true } = {}) {
 }
 function setView(v, { push = true } = {}) {
   if (!VIEWS.some(x => x.id === v)) return;
+  cancelLink();
   if (v === S.view) { if (v === 'graph' && S.focus) setFocus(null, { push }); return; }   // "Graph" again leaves focus mode
   if (S.view === 'graph') sim.stop();
   S.view = v;
@@ -2144,6 +2163,7 @@ function setFocus(id, { push = true } = {}) {
   if (id && (S.view !== 'graph' || !['role', 'process'].includes(typeOf(id)))) return;
   id = id || null;
   if (id === S.focus) return;
+  cancelLink();
   const was = S.focus;
   S.focus = id;
   S.hover = null; S.hoverKey = null;
@@ -2190,6 +2210,7 @@ function toggleEdit(on = !S.edit) {
   S.edit = on;
   document.body.classList.toggle('editing', on);
   hideMenu();
+  cancelLink();
   renderPanel(); renderLegend(); renderChrome(); renderEmpty();
   if (S.view !== 'graph') renderStage();
 }
@@ -2217,6 +2238,7 @@ svg.on('click', (e) => {
 let dragMoved = false;
 const dragBehaviour = d3.drag()
   .clickDistance(4)
+  .filter(e => !e.ctrlKey && !e.button && offHandle(e))
   .subject((e, c) => ({ x: c.node.x, y: c.node.y }))
   .on('start', (e, c) => {
     dragMoved = false;
@@ -2260,8 +2282,9 @@ function resetView() {
   toast(hadPins ? 'View reset. Pinned positions released.' : 'View reset.');
 }
 
-/* ── Right button: context menus and connect-by-dragging ── */
-let rdrag = null;
+/* ── Connecting: right-drag, the connector handle, or "Connect to…" then a click ── */
+let link = null;   // a connection being made: { src, mode: 'drag' | 'click' }; the rubber band runs from src to the pointer
+let swallowClick = false;
 const worldPoint = (e) => d3.zoomTransform(svg.node()).invert(d3.pointer(e, svg.node()));
 const cardAt = (e) => {
   const el = document.elementFromPoint(e.clientX, e.clientY);
@@ -2275,71 +2298,156 @@ const alreadyLinked = (a, b) => {
   const [r, p] = a.type === 'role' ? [a.id, b.id] : [b.id, a.id];
   return itemOf(p).roles.some(l => l.role === r);
 };
+/** Connections start from graph cards only: edit mode, outside focus mode. */
+const canConnectFrom = c => !!c && !!c.node && S.edit && S.view === 'graph' && !S.focus;
+
+function startLink(src, mode, e) {
+  cancelLink();
+  link = { src, mode };
+  document.body.classList.add('connecting');
+  window.addEventListener('pointermove', updateLink);
+  window.addEventListener('blur', cancelLink);
+  const at = e || (lastPointer.x >= 0 ? { clientX: lastPointer.x, clientY: lastPointer.y } : null);
+  if (at) updateLink(at);
+  else rubber.attr('hidden', null).attr('x1', src.node.x).attr('y1', src.node.y).attr('x2', src.node.x).attr('y2', src.node.y);
+}
+function updateLink(e) {
+  if (!link) return;
+  const [x, y] = worldPoint(e);
+  const t = cardAt(e);
+  const ok = t && t.id !== link.src.id ? canLink(link.src, t) && !alreadyLinked(link.src, t) : null;
+  rubber.attr('hidden', null).attr('x1', link.src.node.x).attr('y1', link.src.node.y).attr('x2', x).attr('y2', y).classed('invalid', ok === false);
+  gCards.selectAll('g.card').classed('link-target', c => ok === true && c.key === t.key).classed('link-invalid', c => ok === false && c.key === t.key);
+}
+/** Clear everything a connection in progress shows: listeners, the rubber band and target rings. */
+function cancelLink() {
+  window.removeEventListener('pointermove', updateLink);
+  window.removeEventListener('blur', cancelLink);
+  const l = link;
+  link = null;
+  document.body.classList.remove('connecting');
+  rubber.attr('hidden', true).attr('x1', null).attr('y1', null).attr('x2', null).attr('y2', null).classed('invalid', false);
+  gCards.selectAll('g.card').classed('link-target', false).classed('link-invalid', false);
+  return l;
+}
+/** End the connection on whatever card is under the pointer (none, or the source itself, just cancels). */
+function finishLink(e) {
+  const l = cancelLink();
+  if (!l) return;
+  const t = cardAt(e);
+  if (t && t.id !== l.src.id) connectCards(l.src, t);
+}
+function connectCards(a, t) {
+  if (!canLink(a, t)) { toast(a.type === 'role' && t.type === 'role' ? 'Roles can’t connect to roles. Connect a role to a process, or one process to another.' : 'Only roles and processes can be connected here.'); return; }
+  const flow = a.type === 'process' && t.type === 'process';
+  if (alreadyLinked(a, t)) { toast(flow ? 'That flow already exists.' : 'Those two are already connected.'); return; }
+  if (flow) {
+    let made = null;
+    S.hideFlows = false;   // a new flow should be seen
+    if (commit('add flow', d => (made = addFlow(d, a.id, t.id)))) {
+      select(a.id);
+      setCollapsed('detail', false);
+      focusFlowNote(made.id);
+    }
+    return;
+  }
+  const [roleId, procId] = a.type === 'role' ? [a.id, t.id] : [t.id, a.id];
+  commit('connect', d => linkRoleProcess(d, roleId, procId));
+}
+/** "Connect to…" (card menu or C): the rubber band follows the pointer until a click picks the other end. */
+function beginConnect(c) {
+  if (!S.edit) { toast('Turn on edit mode to make changes.'); return; }
+  if (!c || !['role', 'process'].includes(c.type)) { toast('Select a role or process first.'); return; }
+  if (!canConnectFrom(c)) { toast('Connect cards in the graph view, outside focus mode.'); return; }
+  startLink(c, 'click');
+  toast('Click a role or process to connect it. Esc cancels.');
+}
+// The click that ends a handle drag, or picks the far end of "Connect to…", mustn't also select or deselect.
+svg.node().addEventListener('click', (e) => {
+  if (swallowClick) { swallowClick = false; e.stopPropagation(); return; }
+  if (link && link.mode === 'click') { e.stopPropagation(); finishLink(e); }
+}, true);
+
+/* Connector handle: drag it onto another card, or tap it and then click the other card. */
+let handlePress = null;
+svg.node().addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  const hd = e.target.closest && e.target.closest('.link-handle');
+  if (!hd) return;
+  const c = d3.select(hd.closest('g.card')).datum();
+  if (!canConnectFrom(c)) return;
+  hideMenu();
+  handlePress = { x0: e.clientX, y0: e.clientY };
+  startLink(c, 'drag', e);
+  window.addEventListener('pointerup', onHandleUp);
+  window.addEventListener('pointercancel', onHandleCancel);
+});
+function endHandlePress() {
+  window.removeEventListener('pointerup', onHandleUp);
+  window.removeEventListener('pointercancel', onHandleCancel);
+  const p = handlePress;
+  handlePress = null;
+  return p;
+}
+function onHandleCancel() { endHandlePress(); cancelLink(); }
+function onHandleUp(e) {
+  const p = endHandlePress();
+  if (!p || !link) return;
+  swallowClick = true;
+  setTimeout(() => { swallowClick = false; });   // in case no click follows (released outside the window)
+  if (Math.hypot(e.clientX - p.x0, e.clientY - p.y0) <= 5) {
+    link.mode = 'click';   // a tap: the next click picks the other end
+    toast('Click a role or process to connect it. Esc cancels.');
+    return;
+  }
+  finishLink(e);
+}
+
+/* Right button: a click opens a menu; a drag from a card connects it. */
+let rdrag = null;
 svg.node().addEventListener('contextmenu', e => e.preventDefault());
 svg.node().addEventListener('pointerdown', (e) => {
   if (e.button !== 2) return;
   hideMenu();
+  if (link) { cancelLink(); return; }   // a right-click abandons a connection in progress
   const g = e.target.closest && e.target.closest('g.card');
   const fl = !g && e.target.closest && e.target.closest('g.flow');
-  rdrag = { x0: e.clientX, y0: e.clientY, c: g ? d3.select(g).datum() : null, flow: fl ? d3.select(fl).datum().flow : null, moved: false, target: null };
+  rdrag = { x0: e.clientX, y0: e.clientY, c: g ? d3.select(g).datum() : null, flow: fl ? d3.select(fl).datum().flow : null, moved: false };
   window.addEventListener('pointermove', onRightMove);
   window.addEventListener('pointerup', onRightUp);
-  window.addEventListener('pointercancel', endRightDrag);
-  window.addEventListener('blur', endRightDrag);
+  window.addEventListener('pointercancel', abortRightPress);
+  window.addEventListener('blur', abortRightPress);
 });
 function onRightMove(e) {
-  if (!rdrag) return;
-  if (!rdrag.moved && Math.hypot(e.clientX - rdrag.x0, e.clientY - rdrag.y0) > 5) rdrag.moved = true;
-  if (!rdrag.moved || !rdrag.c || !S.edit || S.view !== 'graph' || S.focus || !rdrag.c.node) return;
-  const [x, y] = worldPoint(e);
-  const t = cardAt(e);
-  const ok = t && t.id !== rdrag.c.id ? canLink(rdrag.c, t) && !alreadyLinked(rdrag.c, t) : null;
-  rubber.attr('hidden', null).attr('x1', rdrag.c.node.x).attr('y1', rdrag.c.node.y).attr('x2', x).attr('y2', y).classed('invalid', ok === false);
-  gCards.selectAll('g.card').classed('link-target', c => ok === true && c.key === t.key).classed('link-invalid', c => ok === false && c.key === t.key);
-  rdrag.target = t;
+  if (!rdrag || rdrag.moved || Math.hypot(e.clientX - rdrag.x0, e.clientY - rdrag.y0) <= 5) return;
+  rdrag.moved = true;
+  if (canConnectFrom(rdrag.c)) startLink(rdrag.c, 'drag', e);
 }
-/** Clear everything a right-drag shows: listeners, the rubber band and target rings. */
-function endRightDrag() {
+function endRightPress() {
   window.removeEventListener('pointermove', onRightMove);
   window.removeEventListener('pointerup', onRightUp);
-  window.removeEventListener('pointercancel', endRightDrag);
-  window.removeEventListener('blur', endRightDrag);
+  window.removeEventListener('pointercancel', abortRightPress);
+  window.removeEventListener('blur', abortRightPress);
   const r = rdrag;
   rdrag = null;
-  rubber.attr('hidden', true).attr('x1', null).attr('y1', null).attr('x2', null).attr('y2', null).classed('invalid', false);
-  gCards.selectAll('g.card').classed('link-target', false).classed('link-invalid', false);
   return r;
 }
+function abortRightPress() { endRightPress(); cancelLink(); }
 function onRightUp(e) {
   // Finish once the right button is up, even if another button was pressed during the drag.
   if (e.button !== 2 && (e.buttons & 2)) return;
-  const r = endRightDrag();
+  const r = endRightPress();
   if (!r) return;
-  if (r.moved) {
-    if (!r.c || !S.edit || S.view !== 'graph' || S.focus) return;
-    const t = cardAt(e);
-    if (!t || t.id === r.c.id) return;
-    if (!canLink(r.c, t)) { toast(r.c.type === 'role' && t.type === 'role' ? 'Roles can’t connect to roles. Connect a role to a process, or one process to another.' : 'Only roles and processes can be connected here.'); return; }
-    const flow = r.c.type === 'process' && t.type === 'process';
-    if (alreadyLinked(r.c, t)) { toast(flow ? 'That flow already exists.' : 'Those two are already connected.'); return; }
-    if (flow) {
-      let made = null;
-      S.hideFlows = false;   // a new flow should be seen
-      if (commit('add flow', d => (made = addFlow(d, r.c.id, t.id)))) {
-        select(r.c.id);
-        setCollapsed('detail', false);
-        focusFlowNote(made.id);
-      }
-      return;
-    }
-    const [roleId, procId] = r.c.type === 'role' ? [r.c.id, t.id] : [t.id, r.c.id];
-    commit('connect', d => linkRoleProcess(d, roleId, procId));
-    return;
-  }
+  if (r.moved) { if (link) finishLink(e); return; }
   if (r.c) showNodeMenu(r.c, e);
   else if (r.flow) showFlowMenu(r.flow, e);
   else if (S.edit && S.view === 'graph' && !S.focus) showCanvasMenu(e);
 }
+// Double-clicking bare canvas offers the same menu as right-clicking it.
+svg.on('dblclick.canvas', (e) => {
+  if (e.target.closest && (e.target.closest('g.card') || e.target.closest('g.flow'))) return;
+  if (S.edit && S.view === 'graph' && !S.focus) showCanvasMenu(e);
+});
 function showFlowMenu(f, e) {
   if (!S.edit) return;
   const two = hasFlow(f.to, f.from);
@@ -2361,6 +2469,7 @@ function showCanvasMenu(e) {
 function showNodeMenu(c, e) {
   const items = [];
   const item = itemOf(c.id);
+  if (canConnectFrom(c)) items.push({ label: 'Connect to…', icon: 'i-link', kbd: 'C', run: () => beginConnect(c) });
   if (S.view === 'graph' && !S.focus && S.data.layout[c.id]) items.push({ label: 'Release position', icon: 'i-unpin', run: () => unpin(c.id) });
   if (S.edit) items.push({ label: `Delete ${TYPES[c.type].label.toLowerCase()} “${displayName(item, c.type)}”`, icon: 'i-trash', danger: true, run: () => deleteEntity(c.id) });
   if (items.length) showMenu(items, e.clientX, e.clientY);
@@ -2388,6 +2497,7 @@ function focusName() {
 const menuEl = $('#menu');
 let menuReturnFocus = null;
 function showMenu(items, x, y, { content = null, returnFocus = null } = {}) {
+  cancelLink();
   menuReturnFocus = returnFocus;
   menuEl.replaceChildren();
   if (content) menuEl.append(content);
@@ -2480,6 +2590,7 @@ document.addEventListener('keydown', (e) => {
   if (mod && k === 'o') { e.preventDefault(); openFile(); return; }
   if (mod && k === 'f') { e.preventDefault(); openSearch(); return; }
   if (e.key === 'Escape') {
+    if (link) { cancelLink(); return; }
     if (!menuEl.hidden) { hideMenu(); return; }
     if (typing) { typing.blur(); return; }
     if (S.search) { setSearch(''); return; }
@@ -2495,6 +2606,7 @@ document.addEventListener('keydown', (e) => {
   if (mod || e.altKey) return;
   if (k === 'e') { toggleEdit(); return; }
   if (k === 'f') { fit(); return; }
+  if (k === 'c') { beginConnect(currentCards.find(c => c.id === S.sel && c.node) || (S.sel && { type: typeOf(S.sel) })); return; }
   if (k === 'w') { openWarnings(); return; }
   if (e.key === '/') { e.preventDefault(); openSearch(); return; }
   const v = VIEWS.find(x => x.key === e.key);
@@ -2578,7 +2690,7 @@ function renderEmpty() {
   if (box.hidden) return;
   const c = $('.content', box);
   c.replaceChildren(S.edit
-    ? h('div', null, h('h1', null, S.data.title), h('p', { class: 'hint' }, 'Right-click anywhere to add your first role or process.'))
+    ? h('div', null, h('h1', null, S.data.title), h('p', { class: 'hint' }, 'Right-click or double-click anywhere to add your first role or process.'))
     : h('div', null,
         h('h1', null, 'Orrery'),
         h('p', null, 'Open an organisation file to explore its roles, processes, meetings and documents — or start from the example.'),
@@ -2709,7 +2821,7 @@ function renderPanel() {
     root.replaceChildren(h('div', { class: 'placeholder' },
       h('p', { class: 'eyebrow' }, 'Nothing selected'),
       h('p', null, 'Select a role, process, meeting or document to see its details here.'),
-      S.edit ? h('p', null, 'Right-click the canvas to add a role or process. Right-drag from a role to a process to connect them, or from one process to another to show that it feeds it.') : null));
+      S.edit ? h('p', null, 'Double-click or right-click the canvas to add a role or process. To connect a role to a process, or show that one process feeds another, drag the brass handle on a card’s right edge onto the other card. Or press C (or choose Connect to… from its menu) and click the other card, or right-drag between them.') : null));
     return;
   }
   const item = itemOf(id);

@@ -35,6 +35,17 @@ async function rightClick(page, at) {
   await page.mouse.down({ button: 'right' });
   await page.mouse.up({ button: 'right' });
 }
+/** Left-drag from a card's connector handle (shown on hover in edit mode) to a point. */
+async function handleDrag(page, cardLocator, to) {
+  const c = await center(cardLocator);
+  await page.mouse.move(c.x, c.y);   // hovering the card reveals its handle
+  const from = await center(cardLocator.locator('.link-handle .knob'));
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2, { steps: 5 });
+  await page.mouse.move(to.x, to.y, { steps: 5 });
+  await page.mouse.up();
+}
 /** An empty spot on the canvas (far from any card or panel). */
 async function emptySpot(page) {
   return page.evaluate(() => {
@@ -47,4 +58,4 @@ async function emptySpot(page) {
   });
 }
 
-module.exports = { APP, FIXTURES, EXAMPLE_FILE, openApp, card, state, data, center, rightDrag, rightClick, emptySpot };
+module.exports = { APP, FIXTURES, EXAMPLE_FILE, openApp, card, state, data, center, rightDrag, rightClick, handleDrag, emptySpot };
