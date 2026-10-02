@@ -74,7 +74,7 @@ test('focus mode shows collapsed roles as full cards', async ({ page }) => {
   await row(page, 'dep-research').click();
   await expectDot(page, 'rol-scientist');
   await page.evaluate(() => window.orrery.focus('pro-early-product-design'));
-  await expect(cards(page)).toHaveCount(9);   // six roles, plus the processes it's fed by and feeds
+  await expect(cards(page)).toHaveCount(12);   // six roles, the processes it's fed by and feeds, its meeting and two documents
   for (const id of RESEARCH) await expectFullCard(page, id);
   await page.click('#btn-unfocus');
   for (const id of RESEARCH) await expectDot(page, id);

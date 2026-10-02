@@ -36,6 +36,7 @@
   --warn: #E0A800;         /* warning triangles */
   --warn-edge: #9A7400;
   --tile-stroke: rgba(0,0,0,.18);
+  --on-ink-muted: #AEB6C1;  /* secondary text on an ink-filled shape (meeting cards) */
 
   --font-ui: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-eyebrow: "Instrument Serif", Georgia, "Times New Roman", serif;
@@ -54,7 +55,7 @@
     --brass-wash: rgba(212, 174, 98, .14); --hover: rgba(230, 233, 238, .07); --danger: #E0796B;
     --unassigned: #5D6673; --orbit: rgba(230, 233, 238, .06); --edge: #6C7888;
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.35); --tile-stroke: rgba(255,255,255,.14);
-    --info: #6AB0E0; --warn: #F2C230; --warn-edge: #F2C230;
+    --info: #6AB0E0; --warn: #F2C230; --warn-edge: #F2C230; --on-ink-muted: #5A6573;
     color-scheme: dark;
   }
 }
@@ -64,7 +65,7 @@
   --brass-wash: rgba(212, 174, 98, .14); --hover: rgba(230, 233, 238, .07); --danger: #E0796B;
   --unassigned: #5D6673; --orbit: rgba(230, 233, 238, .06); --edge: #6C7888;
   --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.35); --tile-stroke: rgba(255,255,255,.14);
-    --info: #6AB0E0; --warn: #F2C230; --warn-edge: #F2C230;
+    --info: #6AB0E0; --warn: #F2C230; --warn-edge: #F2C230; --on-ink-muted: #5A6573;
   color-scheme: dark;
 }
 
@@ -95,6 +96,7 @@ input, textarea, select { font: inherit; color: inherit; }
 .edges line { stroke: var(--edge); stroke-width: 1.4; transition: opacity var(--fast) ease, stroke var(--fast) ease; }
 .edges line.lit { stroke: var(--ink); stroke-width: 1.8; }
 .edges line.dim { opacity: .12; }
+.edges line.ref { stroke-dasharray: 4 3; }   /* focus mode: to a meeting or document */
 
 .card { cursor: pointer; }
 .card .body { transition: opacity var(--fast) ease; }
@@ -112,6 +114,17 @@ input, textarea, select { font: inherit; color: inherit; }
 .card.t-meeting text, .card.t-document text { fill: var(--ink); font: 500 12.5px var(--font-ui); }
 .card.t-meeting.k-header text { font-size: 14px; font-weight: 600; }
 .card.t-meeting.k-header .shape { stroke: var(--ink); stroke-width: 1.5; }
+/* Focus mode: a meeting is a long table (ink-filled, with attendees along the top); a document is a page with a folded corner. */
+.card.t-meeting.k-ref .shape { fill: var(--ink); stroke: none; }
+.card.t-meeting.k-ref text { fill: var(--surface); }
+.card.t-meeting.k-ref .sub { fill: var(--on-ink-muted) !important; }
+.card.t-document.k-ref .shape { fill: var(--surface); stroke: var(--ink); stroke-width: 1.5; stroke-linejoin: round; }
+.card.t-document.k-ref .fold { fill: var(--surface-2); stroke: var(--ink); stroke-width: 1.5; stroke-linejoin: round; }
+.card .ppl .person > * { fill: var(--dept); stroke: var(--bg); stroke-width: 1.6; paint-order: stroke; }
+.card .ppl .more circle { fill: var(--muted); stroke: var(--bg); stroke-width: 1.6; paint-order: stroke; }
+.card .ppl .more path { fill: none; stroke: var(--bg); stroke-width: 1.6; stroke-linecap: round; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .card .ppl .person > * { fill: color-mix(in srgb, var(--dept) 65%, white); } }
+:root[data-theme="dark"] .card .ppl .person > * { fill: color-mix(in srgb, var(--dept) 65%, white); }
 .card .kicon { color: var(--muted); }
 .card.t-role .kicon { color: var(--on-tile); opacity: .85; }
 .card .sub { fill: var(--muted) !important; font: 500 11px var(--font-mono) !important; letter-spacing: .02em; }
@@ -1333,6 +1346,7 @@ const rubber = world.select('.rubber');
 let currentCards = [];
 let currentHeaders = [];
 let lastPos = new Map();     // entity id -> {x, y} of its first card in the last rendered view
+let lastFocusId = null;      // the card at the centre of the last rendered view, if it was focus mode
 let morphing = false;
 
 // d3's default filters, minus presses on a card's connector handle (that drag draws a connection instead).
@@ -1370,6 +1384,52 @@ function nodeGeom(item, type, collapsed = false) {
   }
   const lines = wrap(name, 150, F.proc, 2);
   return { lines, w: Math.max(118, Math.ceil(maxLineW(lines, F.proc)) + 34), h: lines.length * 18 + 26, desc: null, descTip: null, collapsed: false };
+}
+
+/** Focus mode: size of a meeting or document card. A meeting's person icons poke `top` px above its box. */
+function refGeom(item, type) {
+  const lines = wrap(displayName(item, type), 150, F.row, 2);
+  const tw = Math.ceil(maxLineW(lines, F.row));
+  if (type === 'document') return { lines, w: Math.max(110, tw + 36), h: lines.length * 15 + 18, top: 0 };
+  const sub = item.cadence ? CADENCE_LABEL[item.cadence] : null;
+  const ppl = meetingIcons(item);
+  const h = lines.length * 15 + (sub ? 16 : 0) + 18;
+  // The round ends take half the height each; the straight part holds the text and the icons.
+  return { lines, sub, ppl, pplTip: attendeeSummary(item), w: Math.max(120, tw + h, (ppl.length - 1) * 15 + 14 + h), h, top: ppl.length ? 12 : 0 };
+}
+/**
+ * Person icons for a meeting card, from per-department attendee counts ([{ dept, n }], in tie-break order).
+ * One or two attendees: one icon each. Otherwise one per department, at least 3 and at most 6, every department
+ * getting one and the spare icons going, one at a time, to the biggest remaining share (D'Hondt).
+ * More than 6 departments: the five biggest, then '+'.
+ */
+function allocateIcons(counts) {
+  const e = counts.filter(c => c.n > 0).map((c, i) => ({ ...c, i })).sort((a, b) => b.n - a.n || a.i - b.i);
+  const total = e.reduce((sum, c) => sum + c.n, 0);
+  if (!total) return [];
+  if (e.length > 6) return [...e.slice(0, 5).map(c => c.dept), '+'];
+  const slots = total < 3 ? total : Math.min(6, Math.max(3, e.length));
+  const got = e.map(() => 1);
+  for (let k = e.length; k < slots; k++) {
+    let best = 0;
+    e.forEach((c, i) => { if (c.n / (got[i] + 1) > e[best].n / (got[best] + 1)) best = i; });
+    got[best]++;
+  }
+  return e.flatMap((c, i) => Array(got[i]).fill(c.dept));
+}
+/** Attendee roles counted by department, in legend order (unassigned last). */
+function attendeeCounts(m) {
+  const n = new Map();
+  for (const l of m.roles) { const d = deptOf(itemOf(l.role))?.id || null; n.set(d, (n.get(d) || 0) + 1); }
+  return [...S.data.departments.map(d => d.id), null].filter(d => n.has(d)).map(dept => ({ dept, n: n.get(dept) }));
+}
+/** Each icon's colour: a department colour, null for unassigned, or '+'. */
+const meetingIcons = m => allocateIcons(attendeeCounts(m)).map(d => (d === '+' ? '+' : (d && idx.dept.get(d)?.colour) || null));
+function attendeeSummary(m) {
+  const counts = attendeeCounts(m);
+  if (!counts.length) return 'No attendees yet';
+  const total = counts.reduce((sum, c) => sum + c.n, 0);
+  return `${total} attending: ` + counts.map(c => `${c.dept ? idx.dept.get(c.dept).name : 'Unassigned'} ${c.n}`).join(', ');
 }
 
 function rectCollide(pad) {
@@ -1507,14 +1567,16 @@ function focusLayout(id) {
   const byId = new Map(cards.map(c => [c.id, c]));
   const centre = byId.get(id);
   if (!centre) return { cards: [], links: [] };
-  const around = typeOf(id) === 'role'
+  const refs = refCards(id);
+  const around = [...(typeOf(id) === 'role'
     ? idx.roleProcs.get(id).map(x => x.process).sort(byName).map(p => byId.get(p.id))
-    : rolesSorted(itemOf(id).roles.map(l => l.role)).map(r => byId.get(r.id));
+    : rolesSorted(itemOf(id).roles.map(l => l.role)).map(r => byId.get(r.id))), ...refs];
   for (const c of cards) {
     c.node = null;                            // positions come from here, not the simulation
     if (c.collapsed) { Object.assign(c, nodeGeom(itemOf(c.id), c.type, false)); delete c.tip; }   // focus shows everyone in full
   }
   centre.x = 0; centre.y = 0;
+  centre.badges = null;   // its meetings and documents are cards of their own here
   // A process's flow partners sit on an outer ring: fed-by on the left, feeds on the right, both ways top and bottom.
   const outer = { left: [], right: [], both: [] };
   if (typeOf(id) === 'process' && !S.hideFlows) {
@@ -1560,9 +1622,19 @@ function focusLayout(id) {
   const links = sim.force('link').links()
     .filter(l => l.source.id === id || l.target.id === id)
     .map(l => ({ source: byId.get(l.source.id), target: byId.get(l.target.id) }))
-    .filter(l => l.source && l.target);
+    .filter(l => l.source && l.target)
+    .concat(refs.map(c => ({ source: centre, target: c, ref: true })));
   const flows = flowLinks(pid => byId.get(pid), f => f.from === id || f.to === id);
   return { cards: [centre, ...around, ...outerCards], links, flows };
+}
+/** Focus mode: a process's (or role's) meetings, then its documents, each as a card. */
+function refCards(id) {
+  const x = itemOf(id), proc = typeOf(id) === 'process';
+  const meetings = proc ? x.meetings.map(itemOf) : idx.roleMeetings.get(id).map(l => l.meeting);
+  const docs = proc ? x.documents.map(itemOf) : idx.roleDocs.get(id).map(l => l.document);
+  const uniq = list => [...new Map(list.filter(Boolean).map(m => [m.id, m])).values()].sort(byName);
+  const card = (item, type) => ({ key: item.id, id: item.id, type, kind: 'ref', x: 0, y: 0, align: 'center', font: F.row, lh: 15, ...refGeom(item, type) });
+  return [...uniq(meetings).map(m => card(m, 'meeting')), ...uniq(docs).map(d => card(d, 'document'))];
 }
 /** Flows to draw, each with its two ends (simulation nodes in the graph, cards in focus mode). */
 function flowLinks(endOf, keep = () => true) {
@@ -1692,11 +1764,36 @@ function rowCard(type, item, chips) {
 }
 
 /* ═══════════════════════════ Cards: drawing ═══════════════════════════ */
-function sigOf(c) { return JSON.stringify([c.type, c.kind, c.w, c.h, c.lines, c.desc, c.fill, c.icon, c.chips, c.sub, c.badges, c.pinned, c.align, c.warn, c.collapsed, c.tip, c.flow]); }
+function sigOf(c) { return JSON.stringify([c.type, c.kind, c.w, c.h, c.lines, c.desc, c.fill, c.icon, c.chips, c.sub, c.badges, c.pinned, c.align, c.warn, c.collapsed, c.tip, c.flow, c.ppl, c.pplTip]); }
 function setBox(sel, w, h, pad, r) {
   return sel.attr('x', -w / 2 - pad).attr('y', -h / 2 - pad).attr('width', w + pad * 2).attr('height', h + pad * 2).attr('rx', r + pad);
 }
-function cornerRadius(c) { return c.collapsed ? c.w / 2 : c.type === 'role' ? 9 : c.type === 'process' ? 3 : 6; }
+function cornerRadius(c) { return c.collapsed ? c.w / 2 : c.kind === 'ref' ? (c.type === 'meeting' ? c.h / 2 : 1) : c.type === 'role' ? 9 : c.type === 'process' ? 3 : 6; }
+const FOLD = 11;   // a document card's folded corner
+/** A page with its top-right corner cut off, `pad` px outside a w × h box. */
+function docPath(w, h, pad) {
+  const x0 = -w / 2 - pad, y0 = -h / 2 - pad, x1 = w / 2 + pad, y1 = h / 2 + pad, f = FOLD + pad * 0.4;
+  return `M${x0},${y0}H${x1 - f}L${x1},${y0 + f}V${y1}H${x0}Z`;
+}
+/** A meeting card's attendees: head-and-shoulders icons standing behind the table's top edge. */
+function drawPeople(body, c) {
+  const n = c.ppl.length;
+  if (!n) return;
+  const step = n > 1 ? Math.min(15, (c.w - c.h) / (n - 1)) : 0;
+  const g = body.append('g').attr('class', 'ppl').attr('data-tip', c.pplTip);
+  c.ppl.forEach((col, i) => {
+    const p = g.append('g').attr('transform', `translate(${(i - (n - 1) / 2) * step},${-c.h / 2 + 2.5})`);
+    if (col === '+') {
+      p.attr('class', 'more');
+      p.append('circle').attr('cy', -7).attr('r', 6);
+      p.append('path').attr('d', 'M-3,-7H3M0,-10V-4');
+      return;
+    }
+    p.attr('class', 'person').style('--dept', col || 'var(--unassigned)');
+    p.append('path').attr('d', 'M-6.2,0C-6.2,-4.8 -3.4,-7 0,-7C3.4,-7 6.2,-4.8 6.2,0Z');
+    p.append('circle').attr('cy', -10.8).attr('r', 3.3);
+  });
+}
 
 function drawInner(g, c, t) {
   const el = g.node();
@@ -1710,14 +1807,20 @@ function drawInner(g, c, t) {
   g.selectAll('*').remove();
   const r = cornerRadius(c);
   const body = g.append('g').attr('class', 'body');
-  const ring = body.append('rect').attr('class', 'ring');
-  const shape = body.append('rect').attr('class', 'shape');
+  const page = c.kind === 'ref' && c.type === 'document';
+  const ring = body.append(page ? 'path' : 'rect').attr('class', 'ring');
+  if (c.ppl) drawPeople(body, c);   // before the shape, so the table hides their bodies
+  const shape = body.append(page ? 'path' : 'rect').attr('class', 'shape');
   if (c.type === 'role') {
     if (c.fill || !c.collapsed) shape.attr('fill', c.fill || 'url(#hatch)');
     else shape.style('fill', 'var(--unassigned)');   // an unassigned dot is solid too
   }
-  const grow = t && old && (old.w !== c.w || old.h !== c.h);
-  if (grow) {
+  const grow = t && old && (old.w !== c.w || old.h !== c.h) && !page;
+  if (page) {
+    shape.attr('d', docPath(c.w, c.h, 0));
+    ring.attr('d', docPath(c.w, c.h, 4));
+    body.append('path').attr('class', 'fold').attr('d', `M${c.w / 2 - FOLD},${-c.h / 2}V${-c.h / 2 + FOLD}H${c.w / 2}Z`);
+  } else if (grow) {
     const r0 = old.r ?? r;
     setBox(shape, old.w, old.h, 0, r0); setBox(ring, old.w, old.h, 4, r0);
     shape.transition(t).call(s => setBox(s, c.w, c.h, 0, r));
@@ -1810,7 +1913,9 @@ function renderStage({ morph = false } = {}) {
   };
   const T = morph ? d3.transition('morph').duration(dur(540)).ease(d3.easeCubicInOut) : null;
   const delay = c => (morph && view !== 'graph' ? dur(Math.min((c.col || 0) * 24, 240)) : 0);
-  const tf = p => `translate(${p.x},${p.y})`;
+  const tf = p => `translate(${p.x},${p.y})` + (p.s != null ? ` scale(${p.s})` : '');
+  // Focus mode's meeting and document cards grow out of the card at the centre, and shrink back into it.
+  const springFrom = (c, map, centreId) => (c.kind === 'ref' && !map.has(c.id) && centreId && map.has(centreId) ? { ...map.get(centreId), s: 0.3 } : null);
 
   gCards.selectAll('g.card').interrupt('morph');
   const sel = gCards.selectAll('g.card').data(cards, c => c.key);
@@ -1834,12 +1939,12 @@ function renderStage({ morph = false } = {}) {
   if (morph && T) {
     morphing = true;
     entered.each(function (c) {
-      const from = related(c.id, prev);
+      const from = springFrom(c, prev, focus && S.focus) || related(c.id, prev);
       d3.select(this).attr('transform', tf(from || { x: c.x, y: c.y + 10 })).style('opacity', 0);
     });
     all.transition(T).delay(delay).attr('transform', tf).style('opacity', 1);
     sel.exit().each(function (c) {
-      const to = related(c.id, next);
+      const to = springFrom(c, next, lastFocusId) || related(c.id, next);
       const s = d3.select(this).transition(T).style('opacity', 0);
       if (to) s.attr('transform', tf(to));
       s.remove();
@@ -1866,7 +1971,7 @@ function renderStage({ morph = false } = {}) {
   const links = focus ? focus.links : view === 'graph' ? sim.force('link').links() : [];
   const es = gEdges.selectAll('line').data(links, l => l.source.id + '>' + l.target.id);
   const eEnter = es.enter().append('line').attr('data-role', l => l.source.id).attr('data-process', l => l.target.id);
-  const eAll = eEnter.merge(es);
+  const eAll = eEnter.merge(es).classed('ref', l => !!l.ref);
   if (morph && T) {
     eAll.style('opacity', 0);         // re-used edges would otherwise jump ahead of the gliding cards
     eAll.transition(T).delay(dur(320)).style('opacity', 1);
@@ -1915,6 +2020,7 @@ function renderStage({ morph = false } = {}) {
 
   gOrbits.classed('off', view !== 'graph');
   lastPos = new Map([...next].map(([id, c]) => [id, { x: c.x, y: c.y }]));
+  lastFocusId = focus ? S.focus : null;
   applySelection();
   applyHighlight();
 }
@@ -2009,9 +2115,15 @@ function searchMatches(q) {
 function neighbours(id) {
   const t = typeOf(id);
   const s = new Set([id]);
-  if (t === 'role') for (const { process } of idx.roleProcs.get(id)) s.add(process.id);
+  if (t === 'meeting' || t === 'document') return involvedIn(id);
+  if (t === 'role') {
+    for (const { process } of idx.roleProcs.get(id)) s.add(process.id);
+    for (const { meeting } of idx.roleMeetings.get(id)) s.add(meeting.id);
+    for (const { document } of idx.roleDocs.get(id)) s.add(document.id);
+  }
   if (t === 'process') {
     for (const l of itemOf(id).roles) s.add(l.role);
+    for (const ref of [...itemOf(id).meetings, ...itemOf(id).documents]) s.add(ref);
     if (!S.hideFlows) { for (const f of idx.flowsFrom.get(id)) s.add(f.to); for (const f of idx.flowsTo.get(id)) s.add(f.from); }
   }
   return s;
@@ -2066,7 +2178,7 @@ function viewportBox(forTable) {
   return { x: left, y: top, w: Math.max(100, right - left), h: Math.max(100, bottom - top) };
 }
 function contentBounds() {
-  const boxes = currentCards.map(c => ({ x0: c.x - c.w / 2, y0: c.y - c.h / 2, x1: c.x + c.w / 2, y1: c.y + c.h / 2 }));
+  const boxes = currentCards.map(c => ({ x0: c.x - c.w / 2, y0: c.y - c.h / 2 - (c.top || 0), x1: c.x + c.w / 2, y1: c.y + c.h / 2 }));
   for (const hd of currentHeaders) if (!hd.note) boxes.push({ x0: hd.x, y0: hd.y, x1: hd.x + hd.w, y1: hd.y + hd.h });
   if (!boxes.length) return null;
   const b = { x0: d3.min(boxes, v => v.x0), y0: d3.min(boxes, v => v.y0), x1: d3.max(boxes, v => v.x1), y1: d3.max(boxes, v => v.y1) };
@@ -3390,7 +3502,7 @@ function loadData(json, meta = {}) {
   S.sel = null; S.hover = null; S.hoverKey = null; S.legendHover = null; S.focus = null; S.hiddenDepts = new Set();
   S.hideFlows = false; S.hoverFlow = null;
   setSearch('');
-  simNodes.clear(); structureSig = ''; lastPos = new Map(); simStale = false;
+  simNodes.clear(); structureSig = ''; lastPos = new Map(); lastFocusId = null; simStale = false;
   gCards.selectAll('g.card').remove();
   idx = buildIndex(S.data);
   syncSim();
@@ -3523,7 +3635,7 @@ window.orrery = {
   focus: (id) => setFocus(id),
   warnings: () => idx.warn.list.map(w => ({ ...w })),
   edit: (on) => toggleEdit(on),
-  undo, redo, fit, resetView, firstSentence, cleanUrl, linkHref, linkName,
+  undo, redo, fit, resetView, firstSentence, cleanUrl, linkHref, linkName, allocateIcons,
   settle: () => { sim.stop(); settle(); positionGraph(); },
   serialise,
 };

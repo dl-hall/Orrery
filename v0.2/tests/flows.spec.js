@@ -328,7 +328,7 @@ test('focus on a process: roles on the inner ring, flow partners outside — fed
 
   // A role's focus has no outer ring.
   await page.evaluate(() => window.orrery.focus('rol-market-analyst'));
-  await expect(page.locator('#stage g.card')).toHaveCount(3);
+  await expect(page.locator('#stage g.card[data-kind="node"]')).toHaveCount(3);
   await expect(flows(page)).toHaveCount(0);
 });
 

@@ -7,7 +7,7 @@ const at = (page, id) => card(page, id).getAttribute('transform');
 
 async function focusSE(page) {
   await card(page, 'rol-system-engineer').dblclick();
-  await expect(cards(page)).toHaveCount(4);   // System Engineer and its three processes
+  await expect(cards(page)).toHaveCount(9);   // System Engineer, its three processes, its meeting and its four documents
 }
 async function expectFull(page) {
   await expect(cards(page)).toHaveCount(12);
@@ -24,14 +24,14 @@ test('double-click focuses a node: it sits at the centre with only its connectio
   expect(st.sel).toBe('rol-system-engineer');
   await expect(card(page, 'pro-early-product-design')).toBeVisible();
   await expect(card(page, 'pro-product-marketing-announcement')).toBeVisible();
-  await expect(edges(page)).toHaveCount(3);
+  await expect(edges(page)).toHaveCount(8);
   expect(await at(page, 'rol-system-engineer')).toMatch(/^translate\(0,\s?0\)$/);
   await expect(page.locator('#focusbar')).toBeVisible();
   await expect(page.locator('#focusbar .fname')).toHaveText('System Engineer');
 
   // Double-clicking a neighbour re-focuses there.
   await card(page, 'pro-product-marketing-announcement').dblclick();
-  await expect(cards(page)).toHaveCount(6);   // its four roles, plus Early product design, which feeds it
+  await expect(cards(page)).toHaveCount(7);   // its four roles, Early product design (which feeds it) and its document
   expect((await state(page)).focus).toBe('pro-product-marketing-announcement');
   expect(await at(page, 'pro-product-marketing-announcement')).toMatch(/^translate\(0,\s?0\)$/);
 });
@@ -85,7 +85,7 @@ test('Back leaves focus, Forward returns to it', async ({ page }) => {
   await page.keyboard.press('Alt+ArrowLeft');
   await expectFull(page);
   await page.keyboard.press('Alt+ArrowRight');
-  await expect(cards(page)).toHaveCount(4);
+  await expect(cards(page)).toHaveCount(9);
   expect((await state(page)).focus).toBe('rol-system-engineer');
 });
 
