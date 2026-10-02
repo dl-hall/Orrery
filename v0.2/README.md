@@ -21,14 +21,14 @@ Tip: `orrery.html?example` opens straight into the example.
 | Edit | Pencil or **E**. A brass *Edit mode* tab shows at the top while it's on. |
 | Pan and zoom | Drag empty space; mouse wheel. Zoom buttons appear near the bottom middle. **F** fits everything to the screen. |
 | Focus on a node | Double-click a role or process in the graph. It moves to the centre with only its direct connections around it. Double-click another node to move focus there. Leave with **Show full graph** in the bar at the top, **1**, *Graph* in the view menu, or Esc. |
-| Move a node | Drag it. It stays pinned (pin badge on its top-left corner). Right-click it and choose **Release position** to free it, or use **Reset view** in the panel under the toolbar to free every node. |
+| Move a node | Drag it. It stays pinned (pin badge on its top-left corner). Right-click it (or two-finger tap on a touchpad) and choose **Release position** to free it, or use **Reset view** in the panel under the toolbar to free every node. |
 | Search | Move the pointer to the top edge, or press Ctrl+F or **/**. Enter selects the first match. Search also looks in notes and link labels. |
-| Add a role or process | Edit mode → right-click empty canvas |
-| Connect a role and a process | Edit mode → right-drag from one onto the other |
-| Show that one process feeds another | Edit mode → right-drag from the process that gives to the one that receives. Or use *Add an input from…* / *Add an output to…* in the process's panel. |
-| Reverse or delete a flow | Edit mode → right-click the flow's line, or use the buttons on the flow in the panel |
+| Add a role or process | Edit mode → double-click or right-click empty canvas |
+| Connect a role and a process | Edit mode → hover or select one and drag the brass handle on its right edge onto the other. No drag needed: click the handle (or press **C**, or choose *Connect to…* from the card's menu), then click the other card; Esc cancels. Right-drag from one onto the other also works. |
+| Show that one process feeds another | Edit mode → connect from the process that gives to the one that receives, in any of the ways above. Or use *Add an input from…* / *Add an output to…* in the process's panel. |
+| Reverse or delete a flow | Edit mode → right-click (or two-finger tap) the flow's line, or use the buttons on the flow in the panel |
 | Hide process flows | **Process flows** at the bottom of the legend, or its eye button. Like collapsing a department, this only changes the graph, and isn't saved. |
-| Delete | Edit mode → right-click a node, press Delete, or use **Delete** in the panel. Undo brings it back. |
+| Delete | Edit mode → right-click (or two-finger tap) a node, press Delete, or use **Delete** in the panel. Undo brings it back. |
 | Check for mistakes | **Warnings** in the panel under the toolbar, or **W**, lists every discrepancy. Click an item to go to it. Yellow triangles mark the same problems in the right panel and on table cards. **Marks on/off** next to it hides the triangles. |
 | Fill a meeting from its processes | Edit mode → select the meeting → **Add process roles** beside *Roles*. If the meeting is in several processes, pick one or all from the drop-down. |
 | Write a note on an item | Select it and type in **Notes** at the bottom of the right panel. Works with edit mode on or off. |
@@ -127,7 +127,7 @@ The tests run on the installed Edge (`channel: 'msedge'`) and serve d3 from `nod
 
 - **Online only:** needs a connection for d3 and the fonts. Without the fonts, text falls back to system fonts.
 - **Save in place:** only works in Edge and Chrome, because it relies on the File System Access API. Other browsers download a copy.
-- **Graph-only features:** connecting by right-drag and pinning only work in the graph view. The tables are for reading and selecting.
+- **Graph-only features:** connecting cards and pinning only work in the graph view, outside focus mode. The tables are for reading and selecting.
 - **Flows:** their descriptions aren't searchable, and a flow can't be selected on its own: edit it from either process's panel.
 - **Links:** only web (`http`/`https`) and email (`mailto`) links open. Paths to local or network files show as text, because browsers don't open them from a web page.
 - **Undo history:** isn't saved with the file, and moving nodes can't be undone (use Reset view instead).
