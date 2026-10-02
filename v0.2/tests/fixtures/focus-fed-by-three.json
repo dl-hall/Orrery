@@ -1,0 +1,152 @@
+{
+  "orrery": "0.2",
+  "title": "Focus spacing stress test",
+  "departments": [
+    {
+      "id": "dep-ops",
+      "name": "Operations",
+      "colour": "#2F5D8A"
+    },
+    {
+      "id": "dep-fin",
+      "name": "Finance",
+      "colour": "#86397A"
+    },
+    {
+      "id": "dep-eng",
+      "name": "Engineering",
+      "colour": "#3B7447"
+    }
+  ],
+  "roles": [
+    {
+      "id": "rol-0",
+      "name": "Head of operations excellence",
+      "department": "dep-ops"
+    },
+    {
+      "id": "rol-1",
+      "name": "Senior procurement analyst",
+      "department": "dep-ops"
+    },
+    {
+      "id": "rol-2",
+      "name": "Finance business partner",
+      "department": "dep-fin"
+    },
+    {
+      "id": "rol-3",
+      "name": "Management accountant",
+      "department": "dep-fin"
+    },
+    {
+      "id": "rol-4",
+      "name": "Principal systems engineer",
+      "department": "dep-eng"
+    },
+    {
+      "id": "rol-5",
+      "name": "Quality assurance lead",
+      "department": "dep-eng"
+    }
+  ],
+  "processes": [
+    {
+      "id": "pro-centre",
+      "name": "Integrated business planning and review cycle",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [
+        {
+          "role": "rol-0",
+          "raci": [
+            "R"
+          ],
+          "note": ""
+        },
+        {
+          "role": "rol-1",
+          "raci": [
+            "R"
+          ],
+          "note": ""
+        },
+        {
+          "role": "rol-2",
+          "raci": [
+            "R"
+          ],
+          "note": ""
+        },
+        {
+          "role": "rol-3",
+          "raci": [
+            "R"
+          ],
+          "note": ""
+        },
+        {
+          "role": "rol-4",
+          "raci": [
+            "R"
+          ],
+          "note": ""
+        },
+        {
+          "role": "rol-5",
+          "raci": [
+            "R"
+          ],
+          "note": ""
+        }
+      ],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-0",
+      "name": "Quarterly supplier performance review",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-1",
+      "name": "Regional demand forecasting and planning",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    },
+    {
+      "id": "pro-2",
+      "name": "Customer onboarding and account set-up",
+      "description": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+      "roles": [],
+      "meetings": [],
+      "documents": []
+    }
+  ],
+  "meetings": [],
+  "documents": [],
+  "flows": [
+    {
+      "id": "flo-pro-0-pro-centre",
+      "from": "pro-0",
+      "to": "pro-centre",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-1-pro-centre",
+      "from": "pro-1",
+      "to": "pro-centre",
+      "description": ""
+    },
+    {
+      "id": "flo-pro-2-pro-centre",
+      "from": "pro-2",
+      "to": "pro-centre",
+      "description": ""
+    }
+  ]
+}

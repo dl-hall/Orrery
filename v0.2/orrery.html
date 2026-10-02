@@ -1360,7 +1360,7 @@ const zoom = d3.zoom()
 svg.call(zoom).on('dblclick.zoom', null);
 
 // Faint concentric orbits give the canvas a sense of place while panning.
-gOrbits.selectAll('circle').data([220, 440, 660, 880, 1100, 1320, 1540]).join('circle').attr('r', r => r);
+gOrbits.selectAll('circle').data(d3.range(1, 15).map(i => i * 220)).join('circle').attr('r', r => r);
 
 /* ═══════════════════════════ Graph: simulation ═══════════════════════════ */
 const simNodes = new Map();
@@ -1560,6 +1560,37 @@ function graphCards() {
   });
 }
 
+/* Focus-mode geometry. Rings sit on the background orbits, so their radii are multiples of ORBIT. */
+const ORBIT = 220;
+const FOCUS_GAP = 24;   // the least space between neighbouring cards along a ring
+const FOCUS_PAD = 16;   // the least space between any two cards' boxes
+/** A card's box, including the person icons standing on a meeting card. */
+const cardBox = c => ({ x0: c.x - c.w / 2, y0: c.y - c.h / 2 - (c.top || 0), x1: c.x + c.w / 2, y1: c.y + c.h / 2 });
+function cardsClash(a, b, pad = FOCUS_PAD) {
+  const p = cardBox(a), q = cardBox(b);
+  return p.x0 < q.x1 + pad && q.x0 < p.x1 + pad && p.y0 < q.y1 + pad && q.y0 < p.y1 + pad;
+}
+/** How much of a ring a card takes up at angle a: its height at the sides, its width at the top and bottom. */
+const ringExtent = (c, a) => c.w * Math.abs(Math.sin(a)) + (c.h + (c.top || 0)) * Math.abs(Math.cos(a));
+/**
+ * Spread cards along a ring of radius R, centred on angle `mid`, each next to the last with FOCUS_GAP between them.
+ * Returns the angle the group reaches either side of `mid`, end cards included.
+ */
+function arcPlace(list, mid, R) {
+  if (!list.length) return 0;
+  let angles = list.map(() => mid), steps = [], ext = [];
+  for (let pass = 0; pass < 4; pass++) {   // the room a card needs depends on where it ends up, so refine a few times
+    ext = list.map((c, i) => ringExtent(c, angles[i]));
+    steps = ext.slice(1).map((e, i) => 2 * Math.asin(Math.min(1, (ext[i] / 2 + e / 2 + FOCUS_GAP) / (2 * R))));
+    const span = steps.reduce((s, v) => s + v, 0);
+    let a = mid - span / 2;
+    angles = list.map((_, i) => (i ? (a += steps[i - 1]) : a));
+  }
+  list.forEach((c, i) => { c.x = Math.cos(angles[i]) * R; c.y = Math.sin(angles[i]) * R; });
+  const span = steps.reduce((s, v) => s + v, 0);
+  return span / 2 + Math.max(ext[0], ext[ext.length - 1]) / 2 / R;
+}
+
 /** Focus mode: the focused node at the centre of the orbits, its direct connections on a ring around it. */
 function focusLayout(id) {
   const ids = neighbours(id);
@@ -1587,38 +1618,53 @@ function focusLayout(id) {
     outer.both = cardsOf([...ins].filter(p => outs.has(p)));
   }
   const outerCards = [...outer.left, ...outer.right, ...outer.both];
-  const need = around.reduce((s, c) => s + c.w + 24, 0) / (2 * Math.PI);
-  const r = Math.ceil(Math.max(220, need) / 220) * 220;
-  if (outerCards.length) {
-    // Side arcs stack cards about 80px apart; the top and bottom arcs spread them by width.
-    const sideN = Math.max(outer.left.length, outer.right.length);
-    const top = outer.both.filter((_, i) => i % 2 === 0), bottom = outer.both.filter((_, i) => i % 2 === 1);
-    const widest = Math.max(0, ...outer.both.map(c => c.w));
-    const needR = Math.max((sideN - 1) * 80 / (Math.PI * 2 / 3), (Math.max(top.length, bottom.length) - 1) * (widest + 30) / (Math.PI / 2));
-    const R = Math.ceil(Math.max(r + 220, needR) / 220) * 220;
-    const arc = (list, centreAngle, gap, maxSpan) => {
-      const span = Math.min(maxSpan, (list.length - 1) * gap);
-      list.forEach((c, i) => {
-        const a = centreAngle + (list.length > 1 ? -span / 2 + (i * span) / (list.length - 1) : 0);
-        c.x = Math.cos(a) * R; c.y = Math.sin(a) * R;
-      });
-    };
-    arc(outer.left, Math.PI, 80 / R, Math.PI * 2 / 3);
-    arc(outer.right, 0, 80 / R, Math.PI * 2 / 3);
-    arc(top, -Math.PI / 2, (widest + 30) / R, Math.PI / 2);
-    arc(bottom, Math.PI / 2, (widest + 30) / R, Math.PI / 2);
-  }
-  // Turn the inner ring (by up to most of a step) so no role sits on a flow running out to the outer ring.
+  const top = outer.both.filter((_, i) => i % 2 === 0), bottom = outer.both.filter((_, i) => i % 2 === 1);
   const TAU = Math.PI * 2, step = TAU / Math.max(1, around.length);
-  const flowAngles = outerCards.map(c => Math.atan2(c.y, c.x));
-  const angDist = (a, b) => Math.abs((((a - b) % TAU) + TAU + Math.PI) % TAU - Math.PI);
-  const clearance = off => Math.min(...around.flatMap((_, i) => flowAngles.map(f => angDist(-Math.PI / 2 + off + i * step, f))));
-  let turn = 0;
-  if (flowAngles.length && around.length) for (const off of [step / 4, step / 2, (3 * step) / 4]) if (clearance(off) > clearance(turn) + 1e-6) turn = off;
-  around.forEach((c, i) => {
+  const snap = v => Math.ceil(v / ORBIT) * ORBIT;
+  // Inner ring: even angles, starting at the top, turned by `turn`.
+  const placeInner = (r, turn) => around.forEach((c, i) => {
     const a = -Math.PI / 2 + turn + i * step;
     c.x = Math.cos(a) * r; c.y = Math.sin(a) * r;
   });
+  // Outer ring: each group is centred on its own side, with its cards spaced by the room each takes along the ring.
+  const groups = [[outer.right, 0], [bottom, Math.PI / 2], [outer.left, Math.PI], [top, -Math.PI / 2]];
+  const placeOuter = (R) => {
+    const half = groups.map(([list, mid]) => arcPlace(list, mid, R));
+    // Neighbouring groups (a quarter turn apart) mustn't reach into each other.
+    return half.every((h, i) => h + half[(i + 1) % 4] + FOCUS_GAP / R <= Math.PI / 2);
+  };
+  const innerClash = () => around.some((a, i) => cardsClash(a, centre) || around.some((b, j) => j > i && cardsClash(a, b)));
+  let r = snap(Math.max(ORBIT, around.reduce((s, c) => s + c.w + FOCUS_GAP, 0) / TAU));
+  placeInner(r, 0);
+  for (let k = 0; k < 40 && innerClash(); k++) placeInner((r += ORBIT), 0);
+  let R = 0;
+  const fitOuter = () => {
+    if (!outerCards.length) return;
+    R = Math.max(R, r + ORBIT);
+    for (let k = 0; k < 40 && !placeOuter(R); k++) R += ORBIT;
+  };
+  // Turn the inner ring (by up to most of a step) so no card sits on a flow running out to the outer ring.
+  const settleTurn = () => {
+    const flowAngles = outerCards.map(c => Math.atan2(c.y, c.x));
+    const angDist = (a, b) => Math.abs((((a - b) % TAU) + TAU + Math.PI) % TAU - Math.PI);
+    const clearance = off => Math.min(...around.flatMap((_, i) => flowAngles.map(f => angDist(-Math.PI / 2 + off + i * step, f))));
+    let turn = 0;
+    if (flowAngles.length && around.length) for (const off of [step / 4, step / 2, (3 * step) / 4]) if (clearance(off) > clearance(turn) + 1e-6) turn = off;
+    placeInner(r, turn);
+  };
+  fitOuter();
+  settleTurn();
+  // Last check over every pair: widen whichever ring a clash involves until nothing overlaps.
+  const all = [centre, ...around, ...outerCards];
+  const inner = new Set([centre, ...around]);
+  for (let k = 0; k < 40; k++) {
+    let clash = null;
+    for (let i = 0; i < all.length && !clash; i++) for (let j = i + 1; j < all.length; j++) if (cardsClash(all[i], all[j])) { clash = [all[i], all[j]]; break; }
+    if (!clash) break;
+    if (inner.has(clash[0]) && inner.has(clash[1])) r += ORBIT; else R += ORBIT;
+    fitOuter();
+    settleTurn();
+  }
   const links = sim.force('link').links()
     .filter(l => l.source.id === id || l.target.id === id)
     .map(l => ({ source: byId.get(l.source.id), target: byId.get(l.target.id) }))
@@ -2173,7 +2219,7 @@ function viewportBox(forTable) {
   const detailOpen = !$('#detail').classList.contains('collapsed');
   const left = forTable ? 36 : 28;
   const right = W - (detailOpen ? 372 + 40 : 28);
-  const top = forTable ? 92 : 28;
+  const top = forTable ? 92 : S.focus ? (S.edit ? 92 : 72) : 28;   // focus mode: clear the focus bar
   const bottom = H - 28;
   return { x: left, y: top, w: Math.max(100, right - left), h: Math.max(100, bottom - top) };
 }
@@ -3636,6 +3682,7 @@ window.orrery = {
   warnings: () => idx.warn.list.map(w => ({ ...w })),
   edit: (on) => toggleEdit(on),
   undo, redo, fit, resetView, firstSentence, cleanUrl, linkHref, linkName, allocateIcons,
+  focusOverlaps: () => currentCards.flatMap((a, i) => currentCards.slice(i + 1).filter(b => cardsClash(a, b, 0)).map(b => [a.id, b.id])),
   settle: () => { sim.stop(); settle(); positionGraph(); },
   serialise,
 };

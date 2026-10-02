@@ -57,6 +57,12 @@ const { openApp } = require('./helpers');
     await page.click('#sub-toggle');
     await page.mouse.move(800, 880); await page.waitForTimeout(250);
     await shot('10-subpanel-zoom');
+    // Focus spacing under load (fixtures/make-focus-stress.js)
+    for (const name of ['focus-stress-refs', 'focus-fed-by-three']) {
+      await page.evaluate(j => { window.orrery.load(j); window.orrery.settle(); window.orrery.focus('pro-centre'); }, require(`./fixtures/${name}.json`));
+      await page.evaluate(() => window.orrery.fit({ animate: false }));
+      await shot(`18-${name}`);
+    }
     await page.evaluate(() => window.orrery.load({}));
     await shot('11-empty');
     await page.close();

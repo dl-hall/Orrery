@@ -46,6 +46,21 @@ async function handleDrag(page, cardLocator, to) {
   await page.mouse.move(to.x, to.y, { steps: 5 });
   await page.mouse.up();
 }
+/** Pairs of drawn cards whose boxes overlap on screen (a meeting card's box includes its person icons). */
+async function overlaps(page) {
+  return page.evaluate(() => {
+    const boxes = [...document.querySelectorAll('#stage g.card')].map(g => {
+      const rs = [...g.querySelectorAll('.shape, .ppl')].map(e => e.getBoundingClientRect());
+      return { id: g.dataset.id, x0: Math.min(...rs.map(r => r.left)), y0: Math.min(...rs.map(r => r.top)), x1: Math.max(...rs.map(r => r.right)), y1: Math.max(...rs.map(r => r.bottom)) };
+    });
+    const out = [];
+    for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i], b = boxes[j];
+      if (a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1) out.push([a.id, b.id]);
+    }
+    return out;
+  });
+}
 /** An empty spot on the canvas (far from any card or panel). */
 async function emptySpot(page) {
   return page.evaluate(() => {
@@ -58,4 +73,4 @@ async function emptySpot(page) {
   });
 }
 
-module.exports = { APP, FIXTURES, EXAMPLE_FILE, openApp, card, state, data, center, rightDrag, rightClick, handleDrag, emptySpot };
+module.exports = { APP, FIXTURES, EXAMPLE_FILE, openApp, card, state, data, center, rightDrag, rightClick, handleDrag, overlaps, emptySpot };
