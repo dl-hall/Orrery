@@ -62,7 +62,7 @@ Every role, process, meeting and document has **Notes** and **Links** at the bot
 A flow says that one process feeds another, and what passes between them.
 
 - **In the graph:** a flow is a line between two processes with its arrowhead halfway along. Two processes that feed each other get two thin parallel lines, each with a half-arrow; each line sits on the right-hand side of its direction. Hover a line to read what the flow carries. Flows don't move anything in the layout.
-- **In focus mode:** a process's roles sit on the inner ring and the processes it's linked to by flows on an outer ring: *fed by* on the left, *feeds* on the right, both ways above and below.
+- **In focus mode:** a process's roles, then its meetings, then its documents fill the inner ring around it (a role's processes, meetings and documents do the same). When one ring would make the names too small to read, whatever doesn't fit carries on, in the same order, into further rings in the corners. The processes it's linked to by flows sit outside them all: *fed by* on the left, *feeds* on the right, both ways above and below. The layout is planned to stay readable on screen with the detail panel open, and is planned again when the window changes size.
 - **In the panel:** a process has *Fed by* and *Feeds into* sections. Each flow has a description and can list documents it **carries**. When picking a document, the source process's own documents come first, and a new document created there also joins the source process.
 - **In the process table:** *fed by* rows sit under each column's header and *feeds into* rows close the column (dashed borders).
 
@@ -122,7 +122,7 @@ cd v0.2/tests && npm install && npx playwright test
 The tests run on the installed Edge (`channel: 'msedge'`) and serve d3 from `node_modules`.
 - **Screenshots:** `node screenshots.js` writes the key screens, light and dark, to `tests/screenshots/`.
 - **Large fixture:** `node fixtures/make-large.js` regenerates the 150-role fixture.
-- **Focus spacing fixtures:** `node fixtures/make-focus-stress.js` regenerates the crowded focus-mode cases that `layout.spec.js` checks for overlapping cards.
+- **Focus spacing fixtures:** `node fixtures/make-focus-stress.js` regenerates the crowded focus-mode cases that `layout.spec.js` checks: overlapping cards, plus the legibility cases (`focus-target`, `focus-few-roles`, `focus-role-heavy`) that must stay readable at 1280×720 with the detail panel open.
 
 ## Known limits (v0.2)
 

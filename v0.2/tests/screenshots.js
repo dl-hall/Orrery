@@ -57,12 +57,23 @@ const { openApp } = require('./helpers');
     await page.click('#sub-toggle');
     await page.mouse.move(800, 880); await page.waitForTimeout(250);
     await shot('10-subpanel-zoom');
+    await page.click('#sub-toggle');
     // Focus spacing under load (fixtures/make-focus-stress.js)
-    for (const name of ['focus-stress-refs', 'focus-fed-by-three']) {
+    const focusFixture = async (name) => {
       await page.evaluate(j => { window.orrery.load(j); window.orrery.settle(); window.orrery.focus('pro-centre'); }, require(`./fixtures/${name}.json`));
       await page.evaluate(() => window.orrery.fit({ animate: false }));
+    };
+    for (const name of ['focus-stress-refs', 'focus-fed-by-three', 'focus-target', 'focus-few-roles']) {
+      await focusFixture(name);
       await shot(`18-${name}`);
     }
+    // Legibility on a smaller window, detail panel open
+    await page.setViewportSize({ width: 1280, height: 720 });
+    for (const name of ['focus-target', 'focus-few-roles']) {
+      await focusFixture(name);
+      await shot(`19-${name}-1280`);
+    }
+    await page.setViewportSize({ width: 1600, height: 900 });
     await page.evaluate(() => window.orrery.load({}));
     await shot('11-empty');
     await page.close();

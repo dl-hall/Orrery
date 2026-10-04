@@ -315,8 +315,13 @@ test('focus on a process: roles on the inner ring, flow partners outside — fed
   await page.evaluate(() => window.orrery.focus('pro-product-roadmap'));
   const [dx, dy] = await pos(page, DR), [ex, ey] = await pos(page, EPD);
   expect(Math.abs(dx)).toBeLessThan(1);   // both ways: top or bottom
-  expect(Math.abs(dy)).toBeGreaterThan(200);
-  expect(ex).toBeGreaterThan(200);        // feeds: right
+  expect(ex).toBeGreaterThan(0);          // feeds: right
+  // Both outside the roles on their side.
+  for (const id of ['rol-research-manager', 'rol-market-analyst', 'rol-marketing-manager']) {
+    const [x, y] = await pos(page, id);
+    if (y * dy > 0) expect(Math.abs(dy)).toBeGreaterThan(Math.abs(y));
+    if (x > 0) expect(ex).toBeGreaterThan(x);
+  }
   await expect(flows(page)).toHaveCount(3);
   await expect(page.locator('#stage g.flow.two')).toHaveCount(2);
   // No role sits on a flow's line, whichever side the flow leaves from.

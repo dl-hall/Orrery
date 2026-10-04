@@ -1560,10 +1560,22 @@ function graphCards() {
   });
 }
 
-/* Focus-mode geometry. Rings sit on the background orbits, so their radii are multiples of ORBIT. */
-const ORBIT = 220;
+/*
+ * Focus-mode geometry. The focused node sits at the centre. Its roles, then meetings, then documents (a role's processes,
+ * then meetings, then documents) fill ring 1, an ellipse around it; whatever ring 1 doesn't hold carries on, in the same
+ * order, into rings that use only the corners, so the axes stay free for flow partners: fed by on the left, feeds on the
+ * right, both ways above and below, each group just outside the inner cards in its direction. Ring 1 holds as many cards as
+ * it can while the whole still fits the screen (as if the detail panel were open) with names big enough to read.
+ */
+const TAU = Math.PI * 2;
 const FOCUS_GAP = 24;   // the least space between neighbouring cards along a ring
 const FOCUS_PAD = 16;   // the least space between any two cards' boxes
+const FOCUS_ASPECT = 1.3;                              // inner rings are ellipses this much wider than tall
+const FOCUS_CLEAR_SIDE = 0.3, FOCUS_CLEAR_TOP = 0.5;   // radians either side of an axis with flow partners that corner rings leave free
+const FOCUS_NAME_PX = 8.4;                             // once fitted, 14px process names should show at least this big
+const FOCUS_RING1_MIN = 4;                             // ring 1 keeps at least this many cards
+const FOCUS_FALLBACK = 0.95;                           // if names can't get that big: the fullest ring 1 within this share of the best zoom
+const FOCUS_FLOW_ROOM = 72;                            // flow partners keep this clear of the centre card, so every flow's arrow shows
 /** A card's box, including the person icons standing on a meeting card. */
 const cardBox = c => ({ x0: c.x - c.w / 2, y0: c.y - c.h / 2 - (c.top || 0), x1: c.x + c.w / 2, y1: c.y + c.h / 2 });
 function cardsClash(a, b, pad = FOCUS_PAD) {
@@ -1572,6 +1584,10 @@ function cardsClash(a, b, pad = FOCUS_PAD) {
 }
 /** How much of a ring a card takes up at angle a: its height at the sides, its width at the top and bottom. */
 const ringExtent = (c, a) => c.w * Math.abs(Math.sin(a)) + (c.h + (c.top || 0)) * Math.abs(Math.cos(a));
+/** The room a card needs along a curve heading (dx, dy), gap included. */
+const alongExtent = (c, dx, dy) => (c.w * Math.abs(dx) + (c.h + (c.top || 0)) * Math.abs(dy)) / (Math.hypot(dx, dy) || 1) + FOCUS_GAP;
+const angDist = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+const clashesAny = (list, others) => list.some((c, i) => others.some(o => o !== c && cardsClash(c, o)) || list.some((o, j) => j > i && cardsClash(c, o)));
 /**
  * Spread cards along a ring of radius R, centred on angle `mid`, each next to the last with FOCUS_GAP between them.
  * Returns the angle the group reaches either side of `mid`, end cards included.
@@ -1590,8 +1606,189 @@ function arcPlace(list, mid, R) {
   const span = steps.reduce((s, v) => s + v, 0);
   return span / 2 + Math.max(ext[0], ext[ext.length - 1]) / 2 / R;
 }
+/** Points along an arc and the distance travelled to each, for placing cards by length. */
+function arcOf(pts) {
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  return { pts, cum, len: cum[cum.length - 1] };
+}
+const arcPoint = (arc, s) => Math.min(arc.pts.length - 1, d3.bisectLeft(arc.cum, s));
+function arcRoom(arc, c, s) {
+  const j = arcPoint(arc, s), p = arc.pts[Math.max(0, j - 1)], q = arc.pts[Math.min(arc.pts.length - 1, j + 1)];
+  return alongExtent(c, q[0] - p[0], q[1] - p[1]);
+}
+/** Spread cards around an ellipse (half-axes a, b), clockwise from the top turned by `turn`, each taking the room it needs. */
+function ellipsePlace(list, a, b, turn = 0) {
+  const N = 480, pts = [];
+  for (let i = 0; i <= N; i++) { const t = -Math.PI / 2 + turn + (i / N) * TAU; pts.push([a * Math.cos(t), b * Math.sin(t)]); }
+  const arc = arcOf(pts);
+  let at = list.map((_, i) => (i / list.length) * arc.len);
+  for (let pass = 0; pass < 3; pass++) {   // the room a card needs depends on where it ends up, so refine a few times
+    const ext = list.map((c, i) => arcRoom(arc, c, at[i]));
+    const total = d3.sum(ext);
+    let s = 0;
+    at = ext.map(e => { const m = ((s + e / 2) / total) * arc.len; s += e; return m; });
+  }
+  list.forEach((c, i) => { [c.x, c.y] = pts[arcPoint(arc, at[i])]; });
+}
+/** Ring 1: the smallest ellipse whose cards clear each other and everything placed. Returns its half-height. */
+function growRing(list, placed, turn = 0) {
+  if (!list.length) return 0;
+  // no ring can be shorter than its cards laid end to end the narrow way, so start there
+  const least = d3.sum(list, c => Math.min(c.w, c.h + (c.top || 0)) + FOCUS_GAP) / (TAU * Math.sqrt((FOCUS_ASPECT ** 2 + 1) / 2));
+  let b = Math.max(40, Math.floor(least));
+  for (; b < 6000; b += 4) {
+    ellipsePlace(list, b * FOCUS_ASPECT, b, turn);
+    if (!clashesAny(list, placed)) break;
+  }
+  return b;
+}
+/** The arcs of an ellipse outside the sectors kept free around axes with flow partners ({ L, R, T, B }), clockwise from the top. */
+function cornerArcs(a, b, axes) {
+  const free = g => !((axes.R && angDist(g, 0) < FOCUS_CLEAR_SIDE) || (axes.L && angDist(g, Math.PI) < FOCUS_CLEAR_SIDE)
+    || (axes.T && angDist(g, -Math.PI / 2) < FOCUS_CLEAR_TOP) || (axes.B && angDist(g, Math.PI / 2) < FOCUS_CLEAR_TOP));
+  const N = 960, runs = [];
+  let run = null;
+  for (let i = 0; i <= N; i++) {
+    const t = -Math.PI / 2 + (i / N) * TAU, p = [a * Math.cos(t), b * Math.sin(t)];
+    if (!free(Math.atan2(p[1], p[0]))) { run = null; continue; }
+    if (!run) runs.push((run = []));
+    run.push(p);
+  }
+  if (runs.length > 1 && free(-Math.PI / 2)) runs[0] = [...runs.pop(), ...runs[0]];   // the run through the top, split where we started
+  return runs.map(arcOf);
+}
+/** Deal cards round-robin to the arcs and spread each arc's cards evenly along it. False if an arc can't hold its share. */
+function fillArcs(cards, arcs) {
+  const order = arcs.length === 4 ? [0, 2, 1, 3] : arcs.map((_, i) => i);   // opposite corners first, so a part-filled ring stays balanced
+  const per = arcs.map(() => []);
+  cards.forEach((c, i) => per[order[i % arcs.length]].push(c));
+  return arcs.every((arc, r) => {
+    const list = per[r];
+    if (!list.length) return true;
+    let at = list.map((_, i) => ((i + 0.5) / list.length) * arc.len);
+    for (let pass = 0; pass < 2; pass++) {
+      const ext = list.map((c, i) => arcRoom(arc, c, at[i]));
+      const used = d3.sum(ext);
+      if (used - FOCUS_GAP > arc.len) return false;
+      const slack = (arc.len - used) / (list.length + 1);
+      let s = slack;
+      at = ext.map(e => { const m = s + e / 2; s += e + slack; return m; });
+    }
+    list.forEach((c, i) => { [c.x, c.y] = arc.pts[arcPoint(arc, at[i])]; });
+    return true;
+  });
+}
+/**
+ * The inner cards: the first n1 on ring 1, the rest in order on corner rings, each as close in as it can be while holding as
+ * many of the next cards as its corners will take (at least one per corner, or all that are left). Returns the rings.
+ */
+function placeInner(list, centre, n1, turn, axes) {
+  const ring1 = list.slice(0, n1), rings = ring1.length ? [ring1] : [];
+  const placed = [centre, ...ring1];
+  let rest = list.slice(n1), b = Math.max(growRing(ring1, [centre], turn), 60);
+  while (rest.length) {
+    let took = null;
+    for (; b < 6000 && !took; b += 4) {
+      const arcs = cornerArcs(b * FOCUS_ASPECT, b, axes);
+      if (!arcs.length) continue;
+      let n = rest.length;
+      while (n && !fillArcs(rest.slice(0, n), arcs)) n--;
+      if (n < Math.min(rest.length, arcs.length)) continue;
+      const take = rest.slice(0, n);
+      fillArcs(take, arcs);
+      if (!clashesAny(take, placed)) took = take;
+    }
+    if (!took) { growRing(rest, placed); took = rest; }   // never expected; an ordinary ring around everything keeps them clear
+    rings.push(took);
+    placed.push(...took);
+    rest = rest.slice(took.length);
+    b += 8;
+  }
+  return rings;
+}
+/** How far box b keeps from the line running from the centre to (x, y); negative by how deep the line cuts through it. */
+function lineGap(x, y, b) {
+  const L = Math.hypot(x, y) || 1, ux = x / L, uy = y / L;
+  const corners = [[b.x0, b.y0], [b.x1, b.y0], [b.x0, b.y1], [b.x1, b.y1]];
+  const along = corners.map(([px, py]) => px * ux + py * uy), side = corners.map(([px, py]) => px * uy - py * ux);
+  if (Math.max(...along) < 0 || Math.min(...along) > L) return Infinity;   // not beside the line at all
+  const lo = Math.min(...side), hi = Math.max(...side);
+  return lo > 0 ? lo : hi < 0 ? -hi : -Math.min(hi, -lo);
+}
+/** Whether an inner card in partner card p's direction (within its angular span) sits as far out as p or further. */
+function behind(p, inner) {
+  const a = Math.atan2(p.y, p.x), r = Math.hypot(p.x, p.y), q = cardBox(p);
+  const off = g => Math.atan2(Math.sin(g - a), Math.cos(g - a));
+  const spread = [[q.x0, q.y0], [q.x1, q.y0], [q.x0, q.y1], [q.x1, q.y1]].map(([x, y]) => off(Math.atan2(y, x)));
+  const lo = Math.min(0, ...spread), hi = Math.max(0, ...spread);
+  return inner.some(c => { const d = off(Math.atan2(c.y, c.x)); return d > lo && d < hi && Math.hypot(c.x, c.y) >= r; });
+}
+/**
+ * Flow partners: each group ([cards, angle], in the order right, below, left, above) comes in as close as it can without
+ * touching anything or sitting inside an inner card in its direction. Left and right then match, as do above and below,
+ * and where groups meet at the corners, whichever pair keeps the whole closer to the screen's shape moves out.
+ */
+function placeOuter(groups, centre, inner, vp) {
+  const fixed = [centre, ...inner];
+  const blocked = (list, all) => list.some(c => cardsClash(c, centre, FOCUS_FLOW_ROOM) || inner.some(o => cardsClash(c, o))
+    || all.some(o => o !== c && cardsClash(c, o)) || behind(c, inner));
+  const R = groups.map(([list, mid]) => {
+    if (!list.length) return 0;
+    let r = 60;
+    for (; r < 6000; r += 4) { arcPlace(list, mid, r); if (!blocked(list, list)) break; }
+    return r;
+  });
+  let side = Math.max(R[0], R[2]), vert = Math.max(R[1], R[3]);
+  const all = groups.flatMap(([list]) => list);
+  const sides = groups[0][0].length + groups[2][0].length > 0;
+  for (let k = 0; k < 2000; k++) {
+    groups.forEach(([list, mid], i) => arcPlace(list, mid, i % 2 ? vert : side));
+    if (!blocked(all, all)) break;
+    const b = boxBounds([...fixed, ...all].map(cardBox));
+    if (b.w / b.h > vp.w / vp.h || !sides) vert += 4; else side += 4;
+  }
+}
+/**
+ * Choose how many inner cards ring 1 holds: the most for which the fitted zoom still shows names at FOCUS_NAME_PX, else
+ * the most within FOCUS_FALLBACK of the best zoom on offer; never fewer than FOCUS_RING1_MIN. For each size, ring 1 turns
+ * (by less than one card's step) to keep its cards as far from the flow lines as it can.
+ */
+function planFocus(centre, inner, groups, axes, vp) {
+  const goal = FOCUS_NAME_PX / 14;
+  const outerCards = groups.flatMap(([list]) => list), all = [centre, ...inner, ...outerCards];
+  const attempt = n1 => {
+    let turn = 0;
+    if (n1 > 1 && outerCards.length) {
+      // Where the partners land without a turn says where the flow lines run; turn ring 1 to keep its cards furthest from them.
+      placeInner(inner, centre, n1, 0, axes);
+      placeOuter(groups, centre, inner, vp);
+      const ends = outerCards.map(p => [p.x, p.y]), ring1 = inner.slice(0, n1);
+      let best = null;
+      for (let i = 0; i < 24; i++) {
+        const t = (i / 24) * (TAU / n1);
+        growRing(ring1, [centre], t);
+        const gap = d3.min(ends, ([x, y]) => d3.min(ring1, c => lineGap(x, y, cardBox(c))));
+        if (!best || gap > best.gap + 0.5) best = { t, gap };
+      }
+      turn = best.t;
+    }
+    const rings = placeInner(inner, centre, n1, turn, axes);
+    placeOuter(groups, centre, inner, vp);
+    return { n1, k: fitScale(boxBounds(all.map(cardBox)), vp), rings: rings.map(r => r.map(c => c.id)), pos: new Map(all.map(c => [c.id, [c.x, c.y]])) };
+  };
+  const floor = Math.min(FOCUS_RING1_MIN, inner.length), tried = [];
+  for (let n1 = inner.length; n1 >= floor; n1--) {
+    const o = attempt(n1);
+    if (o.k >= goal) return { ...o, goal };
+    tried.push(o);
+  }
+  const best = d3.max(tried, o => o.k);
+  return { ...tried.find(o => o.k >= FOCUS_FALLBACK * best), goal };
+}
+let focusPlan = null;   // the last plan, reused while nothing it depends on has changed
 
-/** Focus mode: the focused node at the centre of the orbits, its direct connections on a ring around it. */
+/** Focus mode: the focused node at the centre, its direct connections around it (see the geometry notes above). */
 function focusLayout(id) {
   const ids = neighbours(id);
   const cards = graphCards().filter(c => ids.has(c.id));
@@ -1606,9 +1803,8 @@ function focusLayout(id) {
     c.node = null;                            // positions come from here, not the simulation
     if (c.collapsed) { Object.assign(c, nodeGeom(itemOf(c.id), c.type, false)); delete c.tip; }   // focus shows everyone in full
   }
-  centre.x = 0; centre.y = 0;
   centre.badges = null;   // its meetings and documents are cards of their own here
-  // A process's flow partners sit on an outer ring: fed-by on the left, feeds on the right, both ways top and bottom.
+  // A process's flow partners sit outside: fed-by on the left, feeds on the right, both ways top and bottom.
   const outer = { left: [], right: [], both: [] };
   if (typeOf(id) === 'process' && !S.hideFlows) {
     const ins = new Set(idx.flowsTo.get(id).map(f => f.from)), outs = new Set(idx.flowsFrom.get(id).map(f => f.to));
@@ -1617,54 +1813,17 @@ function focusLayout(id) {
     outer.right = cardsOf([...outs].filter(p => !ins.has(p)));
     outer.both = cardsOf([...ins].filter(p => outs.has(p)));
   }
-  const outerCards = [...outer.left, ...outer.right, ...outer.both];
   const top = outer.both.filter((_, i) => i % 2 === 0), bottom = outer.both.filter((_, i) => i % 2 === 1);
-  const TAU = Math.PI * 2, step = TAU / Math.max(1, around.length);
-  const snap = v => Math.ceil(v / ORBIT) * ORBIT;
-  // Inner ring: even angles, starting at the top, turned by `turn`.
-  const placeInner = (r, turn) => around.forEach((c, i) => {
-    const a = -Math.PI / 2 + turn + i * step;
-    c.x = Math.cos(a) * r; c.y = Math.sin(a) * r;
-  });
-  // Outer ring: each group is centred on its own side, with its cards spaced by the room each takes along the ring.
   const groups = [[outer.right, 0], [bottom, Math.PI / 2], [outer.left, Math.PI], [top, -Math.PI / 2]];
-  const placeOuter = (R) => {
-    const half = groups.map(([list, mid]) => arcPlace(list, mid, R));
-    // Neighbouring groups (a quarter turn apart) mustn't reach into each other.
-    return half.every((h, i) => h + half[(i + 1) % 4] + FOCUS_GAP / R <= Math.PI / 2);
-  };
-  const innerClash = () => around.some((a, i) => cardsClash(a, centre) || around.some((b, j) => j > i && cardsClash(a, b)));
-  let r = snap(Math.max(ORBIT, around.reduce((s, c) => s + c.w + FOCUS_GAP, 0) / TAU));
-  placeInner(r, 0);
-  for (let k = 0; k < 40 && innerClash(); k++) placeInner((r += ORBIT), 0);
-  let R = 0;
-  const fitOuter = () => {
-    if (!outerCards.length) return;
-    R = Math.max(R, r + ORBIT);
-    for (let k = 0; k < 40 && !placeOuter(R); k++) R += ORBIT;
-  };
-  // Turn the inner ring (by up to most of a step) so no card sits on a flow running out to the outer ring.
-  const settleTurn = () => {
-    const flowAngles = outerCards.map(c => Math.atan2(c.y, c.x));
-    const angDist = (a, b) => Math.abs((((a - b) % TAU) + TAU + Math.PI) % TAU - Math.PI);
-    const clearance = off => Math.min(...around.flatMap((_, i) => flowAngles.map(f => angDist(-Math.PI / 2 + off + i * step, f))));
-    let turn = 0;
-    if (flowAngles.length && around.length) for (const off of [step / 4, step / 2, (3 * step) / 4]) if (clearance(off) > clearance(turn) + 1e-6) turn = off;
-    placeInner(r, turn);
-  };
-  fitOuter();
-  settleTurn();
-  // Last check over every pair: widen whichever ring a clash involves until nothing overlaps.
-  const all = [centre, ...around, ...outerCards];
-  const inner = new Set([centre, ...around]);
-  for (let k = 0; k < 40; k++) {
-    let clash = null;
-    for (let i = 0; i < all.length && !clash; i++) for (let j = i + 1; j < all.length; j++) if (cardsClash(all[i], all[j])) { clash = [all[i], all[j]]; break; }
-    if (!clash) break;
-    if (inner.has(clash[0]) && inner.has(clash[1])) r += ORBIT; else R += ORBIT;
-    fitOuter();
-    settleTurn();
+  const outerCards = groups.flatMap(([list]) => list);
+  const vp = viewportBox(false, { assumeDetail: true });
+  const key = [id, S.hideFlows, S.edit, vp.w, vp.h].join('|');
+  if (!focusPlan || focusPlan.idx !== idx || focusPlan.key !== key) {
+    centre.x = 0; centre.y = 0;
+    const axes = { R: !!outer.right.length, B: !!bottom.length, L: !!outer.left.length, T: !!top.length };
+    focusPlan = { idx, key, area: { w: vp.w, h: vp.h }, ...planFocus(centre, around, groups, axes, vp) };
   }
+  for (const c of [centre, ...around, ...outerCards]) [c.x, c.y] = focusPlan.pos.get(c.id) || [0, 0];
   const links = sim.force('link').links()
     .filter(l => l.source.id === id || l.target.id === id)
     .map(l => ({ source: byId.get(l.source.id), target: byId.get(l.target.id) }))
@@ -2214,23 +2373,29 @@ function applyHighlight() {
 }
 
 /* ═══════════════════════════ Pan, zoom, fit ═══════════════════════════ */
-function viewportBox(forTable) {
+/** The screen area fit() fills. With assumeDetail, it's the area as if the detail panel were open, whatever its state. */
+function viewportBox(forTable, { assumeDetail = false } = {}) {
   const W = window.innerWidth, H = window.innerHeight;
-  const detailOpen = !$('#detail').classList.contains('collapsed');
+  const detailOpen = assumeDetail || !$('#detail').classList.contains('collapsed');
   const left = forTable ? 36 : 28;
   const right = W - (detailOpen ? 372 + 40 : 28);
   const top = forTable ? 92 : S.focus ? (S.edit ? 92 : 72) : 28;   // focus mode: clear the focus bar
   const bottom = H - 28;
   return { x: left, y: top, w: Math.max(100, right - left), h: Math.max(100, bottom - top) };
 }
-function contentBounds() {
-  const boxes = currentCards.map(c => ({ x0: c.x - c.w / 2, y0: c.y - c.h / 2 - (c.top || 0), x1: c.x + c.w / 2, y1: c.y + c.h / 2 }));
-  for (const hd of currentHeaders) if (!hd.note) boxes.push({ x0: hd.x, y0: hd.y, x1: hd.x + hd.w, y1: hd.y + hd.h });
+function boxBounds(boxes) {
   if (!boxes.length) return null;
   const b = { x0: d3.min(boxes, v => v.x0), y0: d3.min(boxes, v => v.y0), x1: d3.max(boxes, v => v.x1), y1: d3.max(boxes, v => v.y1) };
   b.w = b.x1 - b.x0; b.h = b.y1 - b.y0;
   return b;
 }
+function contentBounds() {
+  const boxes = currentCards.map(cardBox);
+  for (const hd of currentHeaders) if (!hd.note) boxes.push({ x0: hd.x, y0: hd.y, x1: hd.x + hd.w, y1: hd.y + hd.h });
+  return boxBounds(boxes);
+}
+/** The zoom fit() picks for content bounds b in the graph: room for a 30px margin each side, within 0.15–1.3. */
+const fitScale = (b, vp) => clamp(Math.min(vp.w / (b.w + 60), vp.h / (b.h + 60)), 0.15, 1.3);
 function fit({ animate = true } = {}) {
   const table = S.view !== 'graph';
   const vp = viewportBox(table);
@@ -2242,7 +2407,7 @@ function fit({ animate = true } = {}) {
     tx = vp.x + vp.w / 2; ty = vp.y + vp.h / 2;
     if (note) { tx = vp.x + vp.w / 2 - textW(note.label, 'italic 24px "Instrument Serif"') / 2; }
   } else if (!table) {
-    k = clamp(Math.min(vp.w / (b.w + 60), vp.h / (b.h + 60)), 0.15, 1.3);
+    k = fitScale(b, vp);
     tx = vp.x + vp.w / 2 - k * (b.x0 + b.w / 2);
     ty = vp.y + vp.h / 2 - k * (b.y0 + b.h / 2);
   } else {
@@ -3653,7 +3818,13 @@ window.addEventListener('drop', async (e) => {
 });
 
 /* ═══════════════════════════ Start ═══════════════════════════ */
-window.addEventListener('resize', () => { hideMenu(); updateReveal(); });
+let refocusTimer = 0;
+window.addEventListener('resize', () => {
+  hideMenu(); updateReveal();
+  // Focus mode plans its layout for the window, so a new size gets a new plan (once the resizing settles).
+  clearTimeout(refocusTimer);
+  refocusTimer = setTimeout(() => { if (S.view === 'graph' && S.focus) { renderStage({ morph: true }); fit(); } }, 150);
+});
 applyPrefs();
 S.data = emptyData();
 idx = buildIndex(S.data);
@@ -3683,6 +3854,7 @@ window.orrery = {
   edit: (on) => toggleEdit(on),
   undo, redo, fit, resetView, firstSentence, cleanUrl, linkHref, linkName, allocateIcons,
   focusOverlaps: () => currentCards.flatMap((a, i) => currentCards.slice(i + 1).filter(b => cardsClash(a, b, 0)).map(b => [a.id, b.id])),
+  focusPlan: () => (S.focus && focusPlan ? { k: focusPlan.k, goal: focusPlan.goal, n1: focusPlan.n1, rings: focusPlan.rings.map(r => [...r]), area: { ...focusPlan.area } } : null),
   settle: () => { sim.stop(); settle(); positionGraph(); },
   serialise,
 };
