@@ -8,6 +8,11 @@ const EXAMPLE_FILE = path.resolve(__dirname, '..', 'examples', 'product-org.json
 
 /** Open the app with the File System Access pickers removed (so the fallbacks run). d3 is embedded in the page. */
 async function openApp(page, { example = true, pickers = false } = {}) {
+  // Record anything the page's Content-Security-Policy blocks: the end-of-test check expects none.
+  await page.addInitScript(() => {
+    window.__cspViolations = [];
+    document.addEventListener('securitypolicyviolation', e => window.__cspViolations.push(`${e.effectiveDirective} ${e.blockedURI}`));
+  });
   if (!pickers) await page.addInitScript(() => { window.showOpenFilePicker = undefined; window.showSaveFilePicker = undefined; });
   await page.goto(APP + (example ? '?example' : ''));
   await page.waitForFunction(() => window.orrery && document.fonts.status === 'loaded');
@@ -15,17 +20,19 @@ async function openApp(page, { example = true, pickers = false } = {}) {
 }
 
 /**
- * The Playwright test, plus checks after every test: no unexpected error was raised in the page, and the model
- * would pass Save's own check (so that check never refuses a model reached by real use). Tests that corrupt the
- * model on purpose opt out of the second with the annotation { type: 'invalid-model' }.
+ * The Playwright test, plus checks after every test: no unexpected error was raised in the page, the
+ * Content-Security-Policy blocked nothing, and the model would pass Save's own check (so that check never refuses a
+ * model reached by real use). Tests that break these on purpose opt out with the annotations
+ * { type: 'invalid-model' } and { type: 'csp-violation' }.
  */
 const test = base.test.extend({
   page: async ({ page }, use, testInfo) => {
     await use(page);
     if (testInfo.status !== testInfo.expectedStatus) return;   // already failed: don't pile on
-    const end = await page.evaluate(() => (window.orrery ? { model: window.orrery.checkModel(), faulted: window.orrery.state().faulted } : null)).catch(() => null);
+    const end = await page.evaluate(() => (window.orrery ? { model: window.orrery.checkModel(), faulted: window.orrery.state().faulted, csp: window.__cspViolations || [] } : null)).catch(() => null);
     if (!end) return;
     base.expect(end.faulted, 'no unexpected error in the page').toBe(false);
+    if (!testInfo.annotations.some(a => a.type === 'csp-violation')) base.expect(end.csp, 'nothing blocked by the Content-Security-Policy').toEqual([]);
     if (!testInfo.annotations.some(a => a.type === 'invalid-model')) base.expect(end.model, 'the model passes the save check').toEqual({ ok: true, problem: null });
   },
 });

