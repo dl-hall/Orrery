@@ -2,13 +2,11 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 
 const APP = pathToFileURL(path.resolve(__dirname, '..', 'orrery.html')).href;
-const D3 = path.resolve(__dirname, 'node_modules', 'd3', 'dist', 'd3.min.js');
 const FIXTURES = path.resolve(__dirname, 'fixtures');
 const EXAMPLE_FILE = path.resolve(__dirname, '..', 'examples', 'product-org.json');
 
-/** Open the app with d3 served locally and the File System Access pickers removed (so the fallbacks run). */
+/** Open the app with the File System Access pickers removed (so the fallbacks run). d3 is embedded in the page. */
 async function openApp(page, { example = true, pickers = false } = {}) {
-  await page.route('**/d3@7*/**', r => r.fulfill({ path: D3, contentType: 'application/javascript' }));
   if (!pickers) await page.addInitScript(() => { window.showOpenFilePicker = undefined; window.showSaveFilePicker = undefined; });
   await page.goto(APP + (example ? '?example' : ''));
   await page.waitForFunction(() => window.orrery && document.fonts.status === 'loaded');
