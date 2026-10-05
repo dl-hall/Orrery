@@ -3795,20 +3795,32 @@ function isNewerFormat(v) {
   const a = parse(v), b = parse(FORMAT);
   return !!a && (a[0] - b[0] || a[1] - b[1]) > 0;
 }
+// Far beyond any organisation (150 roles is about 70 KB), but stops a wrong file freezing the tab while it's read.
+const MAX_FILE = 20 * 1024 * 1024;
+/** Refuse a file too big to be an organisation, before reading any of it. */
+function tooBig(f) {
+  if (f.size <= MAX_FILE) return false;
+  toast(`${f.name} is ${(f.size / 1048576).toFixed(1)} MB, too big to be an Orrery file (limit ${MAX_FILE / 1048576} MB). Nothing was changed.`, 'error');
+  return true;
+}
+/** Open a picked or dropped file. */
+async function readFile(f, handle) {
+  if (tooBig(f)) return false;
+  return loadText(await f.text(), f.name, handle, f.lastModified);
+}
 async function openFile() {
   if (!confirmDiscard()) return;
   if (window.showOpenFilePicker) {
     try {
       const [handle] = await window.showOpenFilePicker({ types: FILE_TYPES });
-      const f = await handle.getFile();
-      loadText(await f.text(), f.name, handle, f.lastModified);
+      await readFile(await handle.getFile(), handle);
     } catch (e) { if (e.name !== 'AbortError') toast(`Couldn’t open the file: ${e.message}`, 'error'); }
   } else $('#file-input').click();
 }
 $('#file-input').addEventListener('change', async (e) => {
   const f = e.target.files[0];
   e.target.value = '';
-  if (f) loadText(await f.text(), f.name, null);
+  if (f) await readFile(f, null);
 });
 function loadExample() {
   if (!confirmDiscard()) return;
@@ -3906,7 +3918,8 @@ window.addEventListener('drop', async (e) => {
   if (!hasFiles(e)) return;
   e.preventDefault(); dragDepth = 0; $('#drop').hidden = true;
   const f = e.dataTransfer.files[0];
-  if (f && confirmDiscard()) loadText(await f.text(), f.name, null);
+  // Check the size first, so no one is asked to discard their work for a file that's then refused.
+  if (f && !tooBig(f) && confirmDiscard()) await readFile(f, null);
 });
 
 /* ═══════════════════════════ Start ═══════════════════════════ */

@@ -248,3 +248,48 @@ test('ids like "constructor" and "__proto__" lay out, pin and save like any othe
   check(await saved(page));
   expect((await saved(page)).title).toBe('Renamed');
 });
+
+/* ── Size limit ── */
+
+const BIG = 21 * 1024 * 1024;
+const refused = 'big.json is 21.0 MB, too big to be an Orrery file (limit 20 MB). Nothing was changed.';
+
+test('a file over 20 MB is refused from the file input', async ({ page }) => {
+  await openApp(page);
+  await page.setInputFiles('#file-input', { name: 'big.json', mimeType: 'application/json', buffer: Buffer.alloc(BIG, ' ') });
+  await expect(page.locator('#toast')).toHaveText(refused);
+  expect((await data(page)).title).toBe('Product organisation');
+});
+
+test('a file over 20 MB is refused when dropped, without asking to discard changes first', async ({ page }) => {
+  await openApp(page);
+  await editTitle(page, 'Unsaved');
+  page.on('dialog', d => { throw new Error('Unexpected dialog: ' + d.message()); });
+  await page.evaluate((size) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([new Uint8Array(size)], 'big.json', { type: 'application/json' }));
+    window.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+  }, BIG);
+  await expect(page.locator('#toast')).toHaveText(refused);
+  expect(await state(page)).toMatchObject({ dirty: true });
+  expect((await data(page)).title).toBe('Unsaved');
+});
+
+test('a file over 20 MB is refused from the open picker', async ({ page }) => {
+  await openApp(page, { pickers: true });
+  await page.evaluate((size) => {
+    window.showOpenFilePicker = async () => [{ name: 'big.json', getFile: async () => new File([new Uint8Array(size)], 'big.json') }];
+  }, BIG);
+  await page.click('#btn-open');
+  await expect(page.locator('#toast')).toHaveText(refused);
+  expect((await data(page)).title).toBe('Product organisation');
+});
+
+test('a large but reasonable file still opens', async ({ page }) => {
+  await openApp(page, { example: false });
+  const org = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'large.json'), 'utf8'));
+  org.roles[0].notes = 'x'.repeat(1024 * 1024);
+  await page.setInputFiles('#file-input', { name: 'roomy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(org)) });
+  await expect(page.locator('#toast')).toHaveText('Opened roomy.json.');
+  expect((await data(page)).roles).toHaveLength(org.roles.length);
+});
