@@ -1,6 +1,7 @@
 const { test, expect } = require('./helpers');
 const fs = require('fs');
-const { openApp, card, state, data } = require('./helpers');
+const path = require('path');
+const { openApp, card, state, data, overlaps, FIXTURES } = require('./helpers');
 const { APP: APP_FILE, D3, BLOCK, sameText, version } = require('./embed-d3');
 
 /* ── d3 is embedded ── */
@@ -212,4 +213,38 @@ test('files from this or an older Orrery open without asking', async ({ page }) 
     expect(await page.evaluate((t) => window.orrery.loadText(t, 'org.json'), text)).toBe(true);
     expect((await data(page)).title).toBe(`v ${v}`);
   }
+});
+
+/* ── Ids and fields named like JavaScript's built-ins ── */
+
+// Never write these ids as object literals in a test: { "__proto__": … } sets a prototype instead of a key.
+const saved = async (page) => JSON.parse(await page.evaluate(() => window.orrery.serialise()));
+
+test('ids like "constructor" and "__proto__" lay out, pin and save like any other', async ({ page }) => {
+  await openApp(page, { example: false });
+  await page.setInputFiles('#file-input', path.join(FIXTURES, 'builtin-ids.json'));
+  await expect(page.locator('#toast')).toHaveText('Opened builtin-ids.json.');
+  await page.evaluate(() => window.orrery.settle());
+  // Only the role the file pinned shows a pin, and it sits where the file put it.
+  for (const id of ['constructor', 'toString', 'hasOwnProperty', 'valueOf']) await expect(card(page, id).locator('.pin')).toHaveCount(0);
+  await expect(card(page, '__proto__').locator('.pin')).toHaveCount(1);
+  expect(await card(page, '__proto__').getAttribute('transform')).toBe('translate(300,-200)');
+  expect(await overlaps(page)).toEqual([]);
+
+  const check = (f) => {
+    expect(Object.keys(f.layout)).toEqual(['__proto__']);
+    expect(f.layout['__proto__']).toEqual({ x: 300, y: -200 });
+    expect(Object.keys(f)).toEqual(expect.arrayContaining(['__proto__', 'constructor']));
+    expect(f['__proto__']).toEqual({ kept: true });
+    expect(f.constructor).toBe('kept too');
+    expect(f.roles.map(r => r.id)).toEqual(['constructor', 'toString', '__proto__']);
+  };
+  check(await saved(page));
+  // Undo and redo copy the model; the odd keys have to survive that too.
+  await page.evaluate(() => window.orrery.commit('rename', d => { d.title = 'Renamed'; }));
+  await page.evaluate(() => window.orrery.undo());
+  check(await saved(page));
+  await page.evaluate(() => window.orrery.redo());
+  check(await saved(page));
+  expect((await saved(page)).title).toBe('Renamed');
 });

@@ -1,0 +1,16 @@
+{
+  "orrery": "0.2",
+  "title": "Built-in names as ids",
+  "__proto__": { "kept": true },
+  "constructor": "kept too",
+  "roles": [
+    { "id": "constructor", "name": "Constructor" },
+    { "id": "toString", "name": "To string" },
+    { "id": "__proto__", "name": "Proto" }
+  ],
+  "processes": [
+    { "id": "hasOwnProperty", "name": "Has own property", "roles": [{ "role": "constructor" }, { "role": "toString" }, { "role": "__proto__" }] },
+    { "id": "valueOf", "name": "Value of", "roles": [{ "role": "toString" }] }
+  ],
+  "layout": { "__proto__": { "x": 300, "y": -200 } }
+}

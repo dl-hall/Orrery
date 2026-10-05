@@ -865,6 +865,10 @@ const $$ = (s, root = document) => Array.from(root.querySelectorAll(s));
 const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
 const str = v => (typeof v === 'string' ? v : v == null ? '' : String(v));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+// Plain-object keys that come from a file (ids in layout, unknown fields) can be any string, even "constructor" or
+// "__proto__". Read and write them as the object's own properties, never the built-in ones every object inherits.
+const ownGet = (o, k) => (Object.hasOwn(o, k) ? o[k] : undefined);
+function ownSet(o, k, v) { Object.defineProperty(o, k, { value: v, enumerable: true, writable: true, configurable: true }); return v; }
 const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
 
 /** Build a DOM element: h('div', {class:'x', onclick}, child, 'text', [more]) */
@@ -1025,11 +1029,11 @@ function normalise(input) {
   d.layout = {};
   const nodeIds = new Set([...roleIds, ...d.processes.map(p => p.id)]);
   if (isObj(src.layout)) for (const [k, v] of Object.entries(src.layout)) {
-    if (nodeIds.has(k) && isObj(v) && Number.isFinite(+v.x) && Number.isFinite(+v.y)) d.layout[k] = { x: Math.round(+v.x), y: Math.round(+v.y) };
+    if (nodeIds.has(k) && isObj(v) && Number.isFinite(+v.x) && Number.isFinite(+v.y)) ownSet(d.layout, k, { x: Math.round(+v.x), y: Math.round(+v.y) });
   }
   // Canonical key order for the file: known keys first, then any extras the file carried.
   const ordered = { orrery: d.orrery, title: d.title, departments: d.departments, roles: d.roles, processes: d.processes, meetings: d.meetings, documents: d.documents, flows: d.flows, layout: d.layout };
-  for (const [k, v] of Object.entries(d)) if (!(k in ordered)) ordered[k] = v;
+  for (const [k, v] of Object.entries(d)) if (!Object.hasOwn(ordered, k)) ownSet(ordered, k, v);
   return { data: ordered, dropped };
 }
 
@@ -1548,7 +1552,7 @@ function syncSim() {
     if (!n) { n = { id: item.id, type, vx: 0, vy: 0 }; simNodes.set(item.id, n); place(n, item, type, i); }
     Object.assign(n, nodeGeom(item, type, type === 'role' && isCollapsed(item)));
     n.dept = type === 'role' ? (deptOf(item)?.id || null) : null;
-    const pin = d.layout[item.id];
+    const pin = ownGet(d.layout, item.id);
     if (pin) { n.fx = pin.x; n.fy = pin.y; n.x = pin.x; n.y = pin.y; } else { n.fx = null; n.fy = null; }
     present.add(item.id);
     nodes.push(n);
@@ -2609,7 +2613,7 @@ const dragBehaviour = d3.drag()
     sim.alphaTarget(0);
     const n = c.node;
     if (dragMoved) {
-      S.data.layout[n.id] = { x: Math.round(n.fx), y: Math.round(n.fy) };
+      ownSet(S.data.layout, n.id, { x: Math.round(n.fx), y: Math.round(n.fy) });
       setDirty(true);
       renderStage();          // shows the pin mark
     } else if (!n.__wasPinned) { n.fx = null; n.fy = null; }
@@ -2825,7 +2829,7 @@ function showNodeMenu(c, e) {
   const items = [];
   const item = itemOf(c.id);
   if (canConnectFrom(c)) items.push({ label: 'Connect to…', icon: 'i-link', kbd: 'C', run: () => beginConnect(c) });
-  if (S.view === 'graph' && !S.focus && S.data.layout[c.id]) items.push({ label: 'Release position', icon: 'i-unpin', run: () => unpin(c.id) });
+  if (S.view === 'graph' && !S.focus && ownGet(S.data.layout, c.id)) items.push({ label: 'Release position', icon: 'i-unpin', run: () => unpin(c.id) });
   if (S.edit) items.push({ label: `Delete ${TYPES[c.type].label.toLowerCase()} “${displayName(item, c.type)}”`, icon: 'i-trash', danger: true, run: () => deleteEntity(c.id) });
   if (items.length) showMenu(items, e.clientX, e.clientY);
 }
@@ -2834,7 +2838,7 @@ function createAt(type, x, y) {
   spawnAt = { x, y };
   commit(`add ${type}`, d => {
     made = createItem(d, type, { name: type === 'role' ? 'New role' : 'New process' });
-    d.layout[made.id] = { x: Math.round(x), y: Math.round(y) };
+    ownSet(d.layout, made.id, { x: Math.round(x), y: Math.round(y) });
   });
   if (made) { select(made.id); setCollapsed('detail', false); focusName(); }
 }
