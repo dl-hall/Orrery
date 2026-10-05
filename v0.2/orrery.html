@@ -3774,9 +3774,22 @@ function loadText(text, name, handle, modified) {
     return false;
   }
   if (!isObj(json)) { toast(`${name} doesn’t contain an organisation. Nothing was changed.`, 'error'); return false; }
-  const dropped = loadData(json, { name, handle, modified });
-  toast(dropped ? `Opened ${name}. Removed ${dropped} link${dropped === 1 ? '' : 's'} to items that don’t exist.` : `Opened ${name}.`);
+  const newer = isNewerFormat(json.orrery);
+  if (newer && !window.confirm(`${name} was saved by Orrery ${str(json.orrery).trim()}. This is Orrery ${FORMAT}, which may not understand everything in it, and saving could lose those parts. Open it anyway?`)) {
+    toast('Nothing was changed.');
+    return false;
+  }
+  // A newer file opens without its handle, so Save asks for a new name rather than overwriting it.
+  const dropped = loadData(json, { name, handle: newer ? null : handle, modified });
+  const opened = dropped ? `Opened ${name}. Removed ${dropped} link${dropped === 1 ? '' : 's'} to items that don’t exist.` : `Opened ${name}.`;
+  toast(newer ? `${opened} Save will ask for a new name, so the newer file stays as it is.` : opened);
   return true;
+}
+/** Was the file saved by a newer Orrery? Compares "major.minor" as numbers, so 0.10 is newer than 0.2. */
+function isNewerFormat(v) {
+  const parse = s => { const m = /^(\d+)\.(\d+)$/.exec(str(s).trim()); return m ? [+m[1], +m[2]] : null; };
+  const a = parse(v), b = parse(FORMAT);
+  return !!a && (a[0] - b[0] || a[1] - b[1]) > 0;
 }
 async function openFile() {
   if (!confirmDiscard()) return;
@@ -3927,7 +3940,7 @@ window.orrery = {
   focus: (id) => setFocus(id),
   warnings: () => idx.warn.list.map(w => ({ ...w })),
   edit: (on) => toggleEdit(on),
-  undo, redo, fit, resetView, firstSentence, cleanUrl, linkHref, linkName, allocateIcons,
+  undo, redo, fit, resetView, firstSentence, cleanUrl, linkHref, linkName, allocateIcons, isNewerFormat,
   checkModel,
   // For tests that simulate faults: an edit that may throw, and the live model (changes skip undo and re-render).
   commit: (label, fn) => commit(label, fn, { allowOutsideEdit: true }),

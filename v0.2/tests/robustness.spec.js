@@ -173,3 +173,43 @@ test('links on items still open in a new tab', async ({ page }) => {
   await tab.waitForLoadState();
   expect(tab.url()).toContain('contoso.sharepoint.com');
 });
+
+/* ── Files from a newer Orrery ── */
+
+test('format versions compare as numbers', async ({ page }) => {
+  await openApp(page);
+  const newer = await page.evaluate(() => ['0.3', '0.10', '1.0', 0.3, '0.2', '0.1', '', null, 'abc', '0.2.1', undefined].map(v => window.orrery.isNewerFormat(v)));
+  expect(newer).toEqual([true, true, true, true, false, false, false, false, false, false, false]);
+});
+
+test('a file from a newer Orrery asks first, and Save then won’t overwrite it', async ({ page }) => {
+  await openFakeFile(page);
+  // The file on disk now says it came from Orrery 0.3.
+  await page.evaluate(() => { const j = JSON.parse(window.__disk.text); j.orrery = '0.3'; j.title = 'From the future'; window.__disk.text = JSON.stringify(j); });
+  await page.evaluate(() => window.orrery.edit(false));
+  const asked = [];
+  page.once('dialog', d => { asked.push(d.message()); d.dismiss(); });
+  await page.click('#btn-open');
+  await expect(page.locator('#toast')).toHaveText('Nothing was changed.');
+  expect(asked[0]).toContain('live.json was saved by Orrery 0.3. This is Orrery 0.2');
+  expect((await data(page)).title).toBe('Product organisation');
+
+  page.once('dialog', d => { asked.push(d.message()); d.accept(); });
+  await page.click('#btn-open');
+  await expect(page.locator('#toast')).toContainText('Save will ask for a new name');
+  expect((await data(page)).title).toBe('From the future');
+  await page.evaluate(() => { window.__disk.cancelSaveAs = true; });
+  await page.click('#btn-save');
+  await expect.poll(async () => (await disk(page)).savedAs).toBe(1);
+  expect((await disk(page)).writes).toBe(0);
+});
+
+test('files from this or an older Orrery open without asking', async ({ page }) => {
+  await openApp(page, { example: false });
+  page.on('dialog', d => { throw new Error('Unexpected dialog: ' + d.message()); });
+  for (const v of ['0.2', '0.1', null, 'abc']) {
+    const text = JSON.stringify({ ...(v === null ? {} : { orrery: v }), title: `v ${v}` });
+    expect(await page.evaluate((t) => window.orrery.loadText(t, 'org.json'), text)).toBe(true);
+    expect((await data(page)).title).toBe(`v ${v}`);
+  }
+});
