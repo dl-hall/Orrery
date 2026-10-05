@@ -2,7 +2,7 @@
 
 A single-file organisation and process navigator. Open `orrery.html` in Edge or Chrome, load a JSON file, and explore or edit roles, processes, meetings and documents live in a meeting.
 
-New in v0.2: **process flows**. One process can feed another: a product roadmap guides a design roadmap, and the design roadmap reports back. Roles still never connect to roles. Also new: **notes and links** on every role, process, meeting and document. No install or admin rights needed. It does need an internet connection to load d3 and the fonts.
+New in v0.2: **process flows**. One process can feed another: a product roadmap guides a design roadmap, and the design roadmap reports back. Roles still never connect to roles. Also new: **notes and links** on every role, process, meeting and document. No install or admin rights needed, and it works offline: the only thing it loads from the internet is its fonts.
 
 - `orrery.html`: the whole app.
 - `examples/product-org.json`: the example organisation (also built in, under **Load example**).
@@ -68,6 +68,17 @@ A flow says that one process feeds another, and what passes between them.
 
 In the graph, click a department in the legend (or its eye button) to collapse its roles into small coloured dots; click again to expand them. This is a view setting only: it doesn't affect the table views and isn't saved to the file.
 
+## Saving safely
+
+Save writes back to the file you opened, so Orrery checks first and won't overwrite it when something looks wrong:
+
+- **Checked before writing:** if the organisation wouldn't reopen exactly as it is, Save doesn't overwrite the file and asks for a new name instead.
+- **Changed elsewhere:** if the file changed on disk since you opened or last saved it (someone else saved it, or OneDrive synced a newer copy), Save asks before overwriting it.
+- **After an error:** if anything goes wrong in Orrery, a message says so, and Save asks for a new name until your work is saved somewhere new.
+- **Newer files:** a file saved by a newer version of Orrery asks before it opens, and Save then asks for a new name, so the newer file is never rewritten in the older format.
+- **Size:** files over 20 MB are refused without being read. An organisation is far smaller (150 roles is about 70 KB).
+- **No contact with servers:** the page is locked down so its code can't contact any server (links you click still open as usual). Apart from the fonts, everything it needs is inside `orrery.html`.
+
 ## Warnings
 
 | Warning | When |
@@ -119,14 +130,15 @@ In the meeting table, chairs are listed first.
 cd v0.2/tests && npm install && npx playwright test
 ```
 
-The tests run on the installed Edge (`channel: 'msedge'`) and serve d3 from `node_modules`.
+The tests run on the installed Edge (`channel: 'msedge'`). Every test also checks, at the end, that no error was raised in the page, the page tried to contact no server, and the organisation would pass Save's check.
 - **Screenshots:** `node screenshots.js` writes the key screens, light and dark, to `tests/screenshots/`.
+- **d3:** it's embedded in `orrery.html`. After changing its version in `package.json` and running `npm install`, run `node embed-d3.js` to embed the new copy; a test checks the two match.
 - **Large fixture:** `node fixtures/make-large.js` regenerates the 150-role fixture.
 - **Focus spacing fixtures:** `node fixtures/make-focus-stress.js` regenerates the crowded focus-mode cases that `layout.spec.js` checks: overlapping cards, plus the legibility cases (`focus-target`, `focus-few-roles`, `focus-role-heavy`) that must stay readable at 1280×720 with the detail panel open.
 
 ## Known limits (v0.2)
 
-- **Online only:** needs a connection for d3 and the fonts. Without the fonts, text falls back to system fonts.
+- **Fonts:** loaded from Google Fonts. Offline, text falls back to system fonts; everything else works.
 - **Save in place:** only works in Edge and Chrome, because it relies on the File System Access API. Other browsers download a copy.
 - **Graph-only features:** connecting cards and pinning only work in the graph view, outside focus mode. The tables are for reading and selecting.
 - **Flows:** their descriptions aren't searchable, and a flow can't be selected on its own: edit it from either process's panel.
