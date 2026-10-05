@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./helpers');
 const { openApp, card, state, data, center } = require('./helpers');
 
 const zoomK = (page) => page.evaluate(() => d3.zoomTransform(document.getElementById('stage')).k);

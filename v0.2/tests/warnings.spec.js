@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./helpers');
 const { openApp, card, state } = require('./helpers');
 
 /** The example with one of each kind of discrepancy added. */

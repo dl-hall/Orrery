@@ -909,6 +909,8 @@ const S = {
   hideFlows: false,     // legend toggle: process flows hidden in the graph; view-only, not saved
   hoverFlow: null,      // flow id under pointer
   search: '',
+  fileModified: null,   // the open file's lastModified when it was read or last written, to spot changes made elsewhere
+  faulted: false,       // an unexpected error happened since the file was opened: Save won't overwrite in place
 };
 let idx = null;         // derived index, rebuilt on every change
 
@@ -1175,7 +1177,16 @@ const UNDO_LIMIT = 100;
 function commit(label, fn, { allowOutsideEdit = false } = {}) {
   if (!S.edit && !allowOutsideEdit) { toast('Turn on edit mode to make changes.'); return false; }
   const before = structuredClone(S.data);
-  const result = fn(S.data);
+  let result;
+  try { result = fn(S.data); }
+  catch (err) {
+    // A half-made change must never reach a save: put the model back as it was, then report the fault.
+    S.data = before;
+    idx = buildIndex(S.data);
+    S.faulted = true;
+    refresh();
+    throw err;
+  }
   if (result === false) return false;
   S.undo.push({ label, data: before, sel: S.sel });
   if (S.undo.length > UNDO_LIMIT) S.undo.shift();
@@ -3724,10 +3735,12 @@ function confirmDiscard() {
   return !S.dirty || window.confirm('You have unsaved changes. Discard them?');
 }
 function loadData(json, meta = {}) {
+  S.faulted = false;
   const { data, dropped } = normalise(json);
   S.data = data;
   S.fileHandle = meta.handle || null;
   S.fileName = meta.name || null;
+  S.fileModified = meta.modified ?? null;
   S.undo = []; S.redo = [];
   S.sel = null; S.hover = null; S.hoverKey = null; S.legendHover = null; S.focus = null; S.hiddenDepts = new Set();
   S.hideFlows = false; S.hoverFlow = null;
@@ -3743,7 +3756,7 @@ function loadData(json, meta = {}) {
   fit({ animate: false });
   return dropped;
 }
-function loadText(text, name, handle) {
+function loadText(text, name, handle, modified) {
   let json;
   try { json = JSON.parse(text); }
   catch (err) {
@@ -3759,7 +3772,7 @@ function loadText(text, name, handle) {
     return false;
   }
   if (!isObj(json)) { toast(`${name} doesn’t contain an organisation. Nothing was changed.`, 'error'); return false; }
-  const dropped = loadData(json, { name, handle });
+  const dropped = loadData(json, { name, handle, modified });
   toast(dropped ? `Opened ${name}. Removed ${dropped} link${dropped === 1 ? '' : 's'} to items that don’t exist.` : `Opened ${name}.`);
   return true;
 }
@@ -3769,7 +3782,7 @@ async function openFile() {
     try {
       const [handle] = await window.showOpenFilePicker({ types: FILE_TYPES });
       const f = await handle.getFile();
-      loadText(await f.text(), f.name, handle);
+      loadText(await f.text(), f.name, handle, f.lastModified);
     } catch (e) { if (e.name !== 'AbortError') toast(`Couldn’t open the file: ${e.message}`, 'error'); }
   } else $('#file-input').click();
 }
@@ -3785,20 +3798,53 @@ function loadExample() {
 }
 const serialise = () => JSON.stringify(S.data, null, 2) + '\n';
 const suggestedName = () => S.fileName || (S.data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'organisation') + '.json';
+/** Would the model come back unchanged from a save and reopen? Checked before Save overwrites a file. */
+function checkModel() {
+  try {
+    const { dropped } = normalise(JSON.parse(serialise()));
+    return dropped ? { ok: false, problem: `${dropped} broken link${dropped === 1 ? '' : 's'} between items` } : { ok: true, problem: null };
+  } catch (e) { return { ok: false, problem: e.message }; }
+}
+/** Write the model through a file handle. The browser swaps the file in only on close, so a failed write leaves it as it was. */
+async function writeTo(handle) {
+  const w = await handle.createWritable();
+  try { await w.write(serialise()); await w.close(); }
+  catch (e) { try { await w.abort(); } catch (_) {} throw e; }
+  try { S.fileModified = (await handle.getFile()).lastModified; } catch (e) { S.fileModified = null; }
+}
+/** Save over the open file when that's safe; otherwise ask for a new name with Save as. */
 async function save() {
   if (document.activeElement && document.activeElement.matches('input, textarea')) document.activeElement.blur();
-  if (S.fileHandle && S.fileHandle.createWritable) {
-    try {
-      const w = await S.fileHandle.createWritable();
-      await w.write(serialise()); await w.close();
-      setDirty(false);
-      toast(`Saved ${S.fileName}.`);
-      return;
-    } catch (e) {
-      if (e.name === 'AbortError' || e.name === 'NotAllowedError') { toast('Not saved: permission to write the file was refused. Try Save as….', 'error'); return; }
-    }
+  const handle = S.fileHandle;
+  if (!handle || !handle.createWritable) return saveAs();
+  if (S.faulted) {
+    toast(`Something went wrong earlier, so Orrery won’t overwrite ${S.fileName}. Choose a new name to keep a copy.`, 'error');
+    return saveAs();
   }
-  return saveAs();
+  if (!checkModel().ok) {
+    toast(`Orrery found a problem in this organisation, so it didn’t overwrite ${S.fileName}. Choose a new name to keep a copy.`, 'error');
+    return saveAs();
+  }
+  let onDisk;
+  try { onDisk = await handle.getFile(); }
+  catch (e) {
+    toast(`Couldn’t find ${S.fileName} where it was opened, so choose where to save it. (${e.message})`, 'error');
+    return saveAs();
+  }
+  if (S.fileModified != null && onDisk.lastModified !== S.fileModified &&
+      !window.confirm(`${S.fileName} has changed on disk since you opened it (perhaps someone else saved it, or OneDrive synced a newer copy). Overwrite it with your version?`)) {
+    toast('Not saved.');
+    return;
+  }
+  try {
+    await writeTo(handle);
+    setDirty(false);
+    toast(`Saved ${S.fileName}.`);
+  } catch (e) {
+    if (e.name === 'AbortError' || e.name === 'NotAllowedError') { toast('Not saved: permission to write the file was refused. Try Save as….', 'error'); return; }
+    toast(`Couldn’t write to ${S.fileName}, so choose where to save it. (${e.message})`, 'error');
+    return saveAs();
+  }
 }
 async function saveAs() {
   if (document.activeElement && document.activeElement.matches('input, textarea')) document.activeElement.blur();
@@ -3806,9 +3852,9 @@ async function saveAs() {
   if (window.showSaveFilePicker) {
     try {
       const handle = await window.showSaveFilePicker({ suggestedName: name, types: FILE_TYPES });
-      const w = await handle.createWritable();
-      await w.write(serialise()); await w.close();
-      S.fileHandle = handle; S.fileName = handle.name;
+      await writeTo(handle);
+      // The new file holds this session's work, so it's safe to keep saving over it.
+      S.fileHandle = handle; S.fileName = handle.name; S.faulted = false;
       setDirty(false);
       toast(`Saved ${handle.name}.`);
       return;
@@ -3822,6 +3868,14 @@ async function saveAs() {
   toast(`Downloaded ${name}.`);
 }
 window.addEventListener('beforeunload', (e) => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+// Any unexpected error: say so, and stop Save overwriting the open file until the work is saved under a new name.
+function onFault() {
+  S.faulted = true;
+  toast('Something went wrong in Orrery. Your work is still here, but Save will ask for a new file name so your original stays safe.', 'error');
+}
+window.addEventListener('error', onFault);
+window.addEventListener('unhandledrejection', onFault);
 
 // Drag a JSON file onto the window to open it.
 let dragDepth = 0;
@@ -3865,13 +3919,17 @@ window.orrery = {
   example: () => structuredClone(EXAMPLE),
   normalise: (json) => normalise(json),
   data: () => structuredClone(S.data),
-  state: () => ({ view: S.view, sel: S.sel, focus: S.focus, edit: S.edit, hidden: [...S.hiddenDepts], hideFlows: S.hideFlows, dirty: S.dirty, search: S.search, undo: S.undo.length, redo: S.redo.length, histIdx: S.histIdx, hist: S.hist.length, fileName: S.fileName, morphing, simAlpha: sim.alpha() }),
+  state: () => ({ view: S.view, sel: S.sel, focus: S.focus, edit: S.edit, hidden: [...S.hiddenDepts], hideFlows: S.hideFlows, dirty: S.dirty, search: S.search, undo: S.undo.length, redo: S.redo.length, histIdx: S.histIdx, hist: S.hist.length, fileName: S.fileName, faulted: S.faulted, morphing, simAlpha: sim.alpha() }),
   setView: (v) => setView(v),
   select: (id) => select(id),
   focus: (id) => setFocus(id),
   warnings: () => idx.warn.list.map(w => ({ ...w })),
   edit: (on) => toggleEdit(on),
   undo, redo, fit, resetView, firstSentence, cleanUrl, linkHref, linkName, allocateIcons,
+  checkModel,
+  // For tests that simulate faults: an edit that may throw, and the live model (changes skip undo and re-render).
+  commit: (label, fn) => commit(label, fn, { allowOutsideEdit: true }),
+  liveData: () => S.data,
   focusOverlaps: () => currentCards.flatMap((a, i) => currentCards.slice(i + 1).filter(b => cardsClash(a, b, 0)).map(b => [a.id, b.id])),
   focusPlan: () => (S.focus && focusPlan ? { k: focusPlan.k, goal: focusPlan.goal, n1: focusPlan.n1, rings: focusPlan.rings.map(r => [...r]), area: { ...focusPlan.area } } : null),
   settle: () => { sim.stop(); settle(); positionGraph(); },

@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./helpers');
 const fs = require('fs');
 const { openApp, card, state, data, center } = require('./helpers');
 
@@ -67,7 +67,7 @@ test('saving writes back to the opened file when the browser allows it', async (
   // Stand-in for the File System Access API: record what gets written.
   await page.evaluate(() => {
     window.__written = null;
-    const handle = { name: 'live.json', getFile: async () => new File([JSON.stringify(window.orrery.example())], 'live.json'),
+    const handle = { name: 'live.json', getFile: async () => new File([JSON.stringify(window.orrery.example())], 'live.json', { lastModified: 1000 }),
       createWritable: async () => { let buf = ''; return { write: async (t) => { buf += t; }, close: async () => { window.__written = buf; } }; } };
     window.showOpenFilePicker = async () => [handle];
   });

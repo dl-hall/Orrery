@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./helpers');
 const { openApp, card, state, data, center, rightDrag, rightClick, emptySpot } = require('./helpers');
 
 const panel = (page) => page.locator('#detail');

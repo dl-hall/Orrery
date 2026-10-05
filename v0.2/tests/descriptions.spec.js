@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./helpers');
 const { openApp, card } = require('./helpers');
 
 const EARLY = 'Takes a promising research result and shapes it into a product concept with a first technical feasibility assessment';

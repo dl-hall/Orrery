@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./helpers');
 const fs = require('fs');
 const path = require('path');
 const { openApp, card, data, FIXTURES, EXAMPLE_FILE } = require('./helpers');

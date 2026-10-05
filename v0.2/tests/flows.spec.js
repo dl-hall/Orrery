@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./helpers');
 const { openApp, card, state, data, center, rightDrag, rightClick } = require('./helpers');
 
 const flow = (page, from, to) => page.locator(`#stage g.flow[data-from="${from}"][data-to="${to}"]`);

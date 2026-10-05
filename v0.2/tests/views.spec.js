@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./helpers');
 const { openApp, card, state, emptySpot } = require('./helpers');
 
 const inCol = (page, col, extra = '') => page.locator(`#stage g.card[data-col="${col}"]${extra}`);

@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./helpers');
 const { openApp, card, state, data } = require('./helpers');
 
 const RESEARCH = ['rol-research-manager', 'rol-scientist', 'rol-project-lead'];

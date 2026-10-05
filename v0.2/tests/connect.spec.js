@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./helpers');
 const { openApp, card, state, data, center, rightClick, handleDrag, emptySpot } = require('./helpers');
 
 const PR = 'pro-product-roadmap', PMA = 'pro-product-marketing-announcement';

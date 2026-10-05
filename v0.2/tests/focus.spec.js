@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./helpers');
 const { openApp, card, state, center } = require('./helpers');
 
 const cards = (page) => page.locator('#stage g.card');

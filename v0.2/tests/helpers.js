@@ -1,3 +1,4 @@
+const base = require('@playwright/test');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
@@ -12,6 +13,23 @@ async function openApp(page, { example = true, pickers = false } = {}) {
   await page.waitForFunction(() => window.orrery && document.fonts.status === 'loaded');
   await page.evaluate(() => window.orrery.settle());
 }
+
+/**
+ * The Playwright test, plus checks after every test: no unexpected error was raised in the page, and the model
+ * would pass Save's own check (so that check never refuses a model reached by real use). Tests that corrupt the
+ * model on purpose opt out of the second with the annotation { type: 'invalid-model' }.
+ */
+const test = base.test.extend({
+  page: async ({ page }, use, testInfo) => {
+    await use(page);
+    if (testInfo.status !== testInfo.expectedStatus) return;   // already failed: don't pile on
+    const end = await page.evaluate(() => (window.orrery ? { model: window.orrery.checkModel(), faulted: window.orrery.state().faulted } : null)).catch(() => null);
+    if (!end) return;
+    base.expect(end.faulted, 'no unexpected error in the page').toBe(false);
+    if (!testInfo.annotations.some(a => a.type === 'invalid-model')) base.expect(end.model, 'the model passes the save check').toEqual({ ok: true, problem: null });
+  },
+});
+const { expect } = base;
 
 const card = (page, id, kind) => page.locator(`#stage g.card[data-id="${id}"]${kind ? `[data-kind="${kind}"]` : ''}`).first();
 const state = (page) => page.evaluate(() => window.orrery.state());
@@ -71,4 +89,4 @@ async function emptySpot(page) {
   });
 }
 
-module.exports = { APP, FIXTURES, EXAMPLE_FILE, openApp, card, state, data, center, rightDrag, rightClick, handleDrag, overlaps, emptySpot };
+module.exports = { test, expect, APP, FIXTURES, EXAMPLE_FILE, openApp, card, state, data, center, rightDrag, rightClick, handleDrag, overlaps, emptySpot };

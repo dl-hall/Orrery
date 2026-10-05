@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./helpers');
 const { openApp, card, state } = require('./helpers');
 
 // Focus mode: a process's or role's meetings and documents appear as cards on the inner ring.
